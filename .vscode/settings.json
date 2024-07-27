@@ -1,3 +1,4 @@
 {
-    "idf.adapterTargetName": "esp32s3"
+    "idf.adapterTargetName": "esp32s3",
+    "idf.port": "/dev/tty.usbserial-0001"
 }
