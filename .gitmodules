@@ -1,0 +1,3 @@
+[submodule "extra_components/q"]
+	path = extra_components/q
+	url = https://github.com/cycfi/q
