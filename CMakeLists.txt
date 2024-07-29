@@ -2,7 +2,11 @@
 # in this exact order for cmake to work correctly
 cmake_minimum_required(VERSION 3.16)
 
-set(APPEND EXTRA_COMPONENT_DIRS "extra_components/q/q_lib")
-set(APPEND EXTRA_COMPONENT_DIRS "extra_components/q/infra")
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
+
+set(EXTRA_COMPONENT_DIRS "q/q_lib" "q/infra")
+
 project(esp32-chromatic-tuner)
+
+link_libraries(PUBLIC libq)
+link_libraries(PUBLIC infra)
