@@ -13,5 +13,6 @@
     ],
     "idf.port": "/dev/tty.usbserial-0001",
     "idf.pythonBinPath": "/Users/boyd/.espressif/python_env/idf5.2_py3.9_env/bin/python",
-    "idf.toolsPath": "/Users/boyd/.espressif"
+    "idf.toolsPath": "/Users/boyd/.espressif",
+    "idf.flashType": "UART"
 }

@@ -12,6 +12,7 @@
 #include "freertos/task.h"
 #include "freertos/semphr.h"
 #include "esp_adc/adc_continuous.h"
+#include <q/support/literals.hpp>
 #include <q/pitch/pitch_detector.hpp>
 
 #define EXAMPLE_ADC_UNIT                    ADC_UNIT_1
@@ -40,6 +41,12 @@ static adc_channel_t channel[1] = {ADC_CHANNEL_4};
 // static adc_channel_t channel[2] = {ADC_CHANNEL_2, ADC_CHANNEL_3};
 static adc_channel_t channel[1] = {ADC_CHANNEL_4};
 #endif
+
+namespace q = cycfi::q;
+using namespace q::literals;
+using std::fixed;
+
+// constexpr auto sps = 44100;
 
 static TaskHandle_t s_task_handle;
 static const char *TAG = "TUNER";
@@ -104,6 +111,8 @@ extern "C" void app_main() {
     ESP_ERROR_CHECK(adc_continuous_register_event_callbacks(handle, &cbs, NULL));
     ESP_ERROR_CHECK(adc_continuous_start(handle));
 
+    q::pitch_detector pd(30_Hz, 1500_Hz, 44100, -45_dB);
+
     while (1) {
 
         /**
@@ -124,14 +133,21 @@ extern "C" void app_main() {
                 ESP_LOGI("TASK", "ret is %x, ret_num is %"PRIu32" bytes", ret, ret_num);
                 for (int i = 0; i < ret_num; i += SOC_ADC_DIGI_RESULT_BYTES) {
                     adc_digi_output_data_t *p = (adc_digi_output_data_t*)&result[i];
-                    uint32_t chan_num = EXAMPLE_ADC_GET_CHANNEL(p);
+                    // uint32_t chan_num = EXAMPLE_ADC_GET_CHANNEL(p);
                     uint32_t data = EXAMPLE_ADC_GET_DATA(p);
-                    /* Check the channel number validation, the data is invalid if the channel num exceed the maximum channel */
-                    if (chan_num < SOC_ADC_CHANNEL_NUM(EXAMPLE_ADC_UNIT)) {
-                        ESP_LOGI(TAG, "Unit: %s, Channel: %"PRIu32", Value: %"PRIx32, unit, chan_num, data);
-                    } else {
-                        ESP_LOGW(TAG, "Invalid data [%s_%"PRIu32"_%"PRIx32"]", unit, chan_num, data);
+                    bool is_ready = pd(data);
+                    if (is_ready) {
+                        auto frequency = pd.get_frequency();
+                        if (frequency != 0.0f) {
+                            ESP_LOGI(TAG, "Frequency: %f", frequency);                            
+                        }
                     }
+                    // /* Check the channel number validation, the data is invalid if the channel num exceed the maximum channel */
+                    // if (chan_num < SOC_ADC_CHANNEL_NUM(EXAMPLE_ADC_UNIT)) {
+                    //     ESP_LOGI(TAG, "Unit: %s, Channel: %"PRIu32", Value: %"PRIx32, unit, chan_num, data);
+                    // } else {
+                    //     ESP_LOGW(TAG, "Invalid data [%s_%"PRIu32"_%"PRIx32"]", unit, chan_num, data);
+                    // }
                 }
                 /**
                  * Because printing is slow, so every time you call `ulTaskNotifyTake`, it will immediately return.
