@@ -188,14 +188,6 @@ extern "C" void app_main() {
                     in[i] = normalizedValue;
                 }
 
-                ////////////////////////////////////////////////////////////////////////////
-                // Output
-                // auto data_length = num_of_bytes_read / SOC_ADC_DIGI_RESULT_BYTES;
-                auto data_length = valuesStored;
-                constexpr auto n_channels = 5;
-                std::vector<float> out(data_length * n_channels);
-                std::fill(out.begin(), out.end(), 0); // Fill the output vector with zeros
-
                 auto const&                 bits = pd.bits();
                 auto const&                 edges = pd.edges();
                 q::bitstream_acf<>          bacf{ bits };
@@ -216,14 +208,8 @@ extern "C" void app_main() {
 
                 std::uint64_t               nanoseconds = 0;
 
+                bool calculatedAFrequency = false;
                 for (auto i = 0; i < valuesStored; ++i) {
-                    auto pos = i * n_channels;
-                    auto ch1 = pos;      // input
-                    auto ch2 = pos+1;    // zero crossings
-                    auto ch3 = pos+2;    // bacf
-                    auto ch4 = pos+3;    // frequency
-                    auto ch5 = pos+4;    // predicted frequency
-
                     float time = i / float(TUNER_ADC_SAMPLE_RATE);
 
                     auto s = in[i]; // input signal
@@ -263,37 +249,7 @@ extern "C" void app_main() {
                     auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(elapsed);
                     nanoseconds += duration.count();
 
-                    out[ch2] = -0.8; // placeholder for bitset bits
-                    out[ch3] = 0.0f; // placeholder for autocorrelation results
-                    out[ch4] = -0.8; // placeholder for frequency
-
-                    if (ready) {
-                        auto frame = edges.frame() + (edges.window_size() / 2);
-                        auto extra = frame - edges.window_size();
-                        auto size = bits.size();
-
-                        {
-                            auto f = pd.get_frequency();
-                            auto p = pd.periodicity();
-                            auto f2 = float(TUNER_ADC_SAMPLE_RATE) / pd.get_period_detector().fundamental()._period;
-                            auto fr = pd.frames_after_shift();
-                        }
-
-                        // // Print the frequency
-                        // {
-                        //     auto f = pd.get_frequency() / as_double(high_fs);
-                        //     auto out_i = (&out[ch4] - (((size - 1) + extra) * n_channels));
-                        //     for (auto i = 0; i != size; ++i) {
-                        //         *out_i = f;
-                        //         out_i += n_channels;
-                        //     }
-                        // }
-
-                        // {
-                        //     auto f = pd.get_frequency() / as_double(high_fs);
-                        // }
-
-                    }
+                    calculatedAFrequency = ready;
                     // // Print the predicted frequency
                     // {
                     //     auto f = pd.predict_frequency() / as_double(high_fs);
@@ -304,8 +260,10 @@ extern "C" void app_main() {
                 }
 
                 // auto f = pd.get_frequency() / as_double(high_fs);
-                auto f = pd.get_frequency();
-                ESP_LOGI("QLib", "Frequency: %f", f);
+                if (calculatedAFrequency) {
+                    auto f = pd.get_frequency();
+                    ESP_LOGI("QLib", "Frequency: %f", f);
+                }
 
                 /**
                  * Because printing is slow, so every time you call `ulTaskNotifyTake`, it will immediately return.
