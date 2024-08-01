@@ -55,7 +55,7 @@ CONSTEXPR frequency low_fs  = Fs[1];
 static adc_channel_t channel[1] = {ADC_CHANNEL_4};
 #else
 // static adc_channel_t channel[2] = {ADC_CHANNEL_2, ADC_CHANNEL_3};
-static adc_channel_t channel[1] = {ADC_CHANNEL_4};
+static adc_channel_t channel[1] = {ADC_CHANNEL_1};
 #endif
 
 namespace q = cycfi::q;
