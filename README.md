@@ -1,5 +1,28 @@
 This is not yet functional but the plan is to have a working chromatic tuner based on the Heltec WiFi Kit 32 (V3): https://heltec.org/project/wifi-kit32-v3/
 
+1. Install Visual Studio Code
+2. Install the ESP-IDF v5.3 extension
+3. Make sure you have `git` installed
+4. Clone this github project
+5. From a terminal go into the project and do this:
+    ```
+    git submodule update --init --recursive
+    ```
+6. Modify `extra_/_components/q_lib/CMakeLists.txt` and `extra_components/infra/CMakeLists.txt`
+7. Set your ESP32 target (esp32s3)
+8. With your ESP32 dev board plugged-in, select the port to use
+
+
+TODO:
+9. Add LVGL with the VS Code ESP Components tool (ma)
+10. Add esp_lvgl_port with the VS Code ESP Components tool
+// Add lvgl_esp32_drivers with the VS Code ESP Components tool
+// 6. Go to the root of the project and add the lgvl_esp32_drivers as a submodule: `git submodule add https://github.com/lvgl/lvgl_esp32_drivers.git components/lvgl_esp32_drivers`
+TODO: Fix these instructions: 8. Go to the root of the project and clone the Q DSP Library: `git submodule ad https:....(TODO)
+
+
+# Do not include a project name if building for ESP-IDF
+
 Goal:
 Build an ESP-IDF app that runs on ESP32v3, uses q_lib for frequency detection, and uses the built-in OLED to display tuning info.
 
