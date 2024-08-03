@@ -11,6 +11,15 @@ This is not yet functional but the plan is to have a working chromatic tuner bas
 6. Modify `extra_/_components/q_lib/CMakeLists.txt` and `extra_components/infra/CMakeLists.txt`
 7. Set your ESP32 target (esp32s3)
 8. With your ESP32 dev board plugged-in, select the port to use
+9. Install `lvgl/lvgl`
+    - Open the Command Palette (Command+Shift+P) and select `ESP-IDF: Welcome`
+    - Click the `Components manager` button
+    - Search for `lvgl`
+    - Select v8.4.0 from the version dropdown
+    - Click the `Install` button
+10. Install `espressif/esp_lvgl_port`
+    - Use the command palette similar to what you did in step #9
+    - Select v2.2.2
 
 
 TODO:

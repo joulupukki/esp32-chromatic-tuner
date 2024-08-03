@@ -16,6 +16,19 @@
 #include <q/support/literals.hpp>
 #include <q/support/pitch_names.hpp>
 
+//
+// OLED Support
+//
+#include "pins_heltec.h" // taken from the Heltec Library to get the pins needed to power and control the OLED
+#include "lvgl.h"
+#include "esp_lcd_panel_vendor.h"
+#include "esp_lcd_panel_io.h"
+#include "esp_lcd_panel_ops.h"
+#include "driver/i2c_master.h"
+#include "esp_lcd_io_i2c.h"
+#include "esp_lvgl_port.h"
+#include "esp_lvgl_port_compatibility.h"
+
 #define TUNER_ADC_UNIT                    ADC_UNIT_1
 #define _TUNER_ADC_UNIT_STR(unit)         #unit
 #define TUNER_ADC_UNIT_STR(unit)          _TUNER_ADC_UNIT_STR(unit)
@@ -45,6 +58,16 @@
 // rate (Samples Per Second/sps).
 // #define TUNER_ADC_SAMPLE_RATE 20 * 1000
 #define TUNER_ADC_SAMPLE_RATE 10000
+
+//
+// OLED Items
+//
+#define LCD_PIXEL_CLOCK_HZ      500000
+// Bit number used to represent command and parameter
+#define LCD_CMD_BITS    8
+#define LCD_PARAM_BITS  8
+#define LCD_H_RES       128
+#define LCD_V_RES       64
 
 using namespace cycfi::q::pitch_names;
 using frequency = cycfi::q::frequency;
@@ -108,7 +131,117 @@ static void continuous_adc_init(adc_channel_t *channel, uint8_t channel_num, adc
     *out_handle = handle;
 }
 
+// static void oled_init(esp_lcd_panel_handle_t *out_handle) {
+static void display_init(lv_disp_t **out_handle) {
+
+    // Configure I2C as master
+
+    i2c_master_bus_config_t i2c_mst_config = {
+        .i2c_port = 0,
+        .sda_io_num = SDA_OLED,
+        .scl_io_num = SCL_OLED,
+        .clk_source = I2C_CLK_SRC_DEFAULT,
+        .glitch_ignore_cnt = 7,
+        .intr_priority = 1,
+        .trans_queue_depth = 10,
+        .flags = {
+            .enable_internal_pullup = true // Internal pull-up resistor.
+        }
+    };
+
+    i2c_master_bus_handle_t bus_handle;
+    ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_mst_config, &bus_handle));
+
+    // i2c_device_config_t dev_cfg = {
+    //     .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+    //     .device_address = 0x3c,
+    //     .scl_speed_hz = LCD_PIXEL_CLOCK_HZ,
+    // };
+
+    // i2c_master_dev_handle_t dev_handle;
+    // ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &dev_cfg, &dev_handle));
+
+    // Configure the OLED
+
+    esp_lcd_panel_io_handle_t io_handle = NULL;
+    esp_lcd_panel_io_i2c_config_t io_config = {
+        .dev_addr = 0x3c,
+        .control_phase_bytes = 1, // refer to LCD spec
+        .dc_bit_offset = 6,       // refer to LCD spec
+        .lcd_cmd_bits = LCD_CMD_BITS,
+        .lcd_param_bits = LCD_CMD_BITS,
+        .scl_speed_hz = LCD_PIXEL_CLOCK_HZ,
+    };
+    ESP_ERROR_CHECK(esp_lcd_new_panel_io_i2c_v2(bus_handle, &io_config, &io_handle));
+
+    esp_lcd_panel_ssd1306_config_t ssd1306_config = {
+        .height = 64
+    };
+    esp_lcd_panel_dev_config_t panel_config = {
+        .reset_gpio_num = RST_OLED,
+        .bits_per_pixel = 1,
+        .vendor_config = &ssd1306_config
+    };
+
+    esp_lcd_panel_handle_t panel_handle = NULL;
+    ESP_ERROR_CHECK(esp_lcd_new_panel_ssd1306(io_handle, &panel_config, &panel_handle));
+
+    ESP_ERROR_CHECK(esp_lcd_panel_reset(panel_handle));
+    ESP_ERROR_CHECK(esp_lcd_panel_init(panel_handle));
+    ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(panel_handle, true));
+
+    ESP_LOGI(TAG, "Initialize LVGL");
+    const lvgl_port_cfg_t lvgl_cfg = ESP_LVGL_PORT_INIT_CONFIG();
+    lvgl_port_init(&lvgl_cfg);
+
+    const lvgl_port_display_cfg_t disp_cfg = {
+        .io_handle = io_handle,
+        .panel_handle = panel_handle,
+        .buffer_size = LCD_H_RES * LCD_V_RES,
+        .double_buffer = true,
+        .hres = LCD_H_RES,
+        .vres = LCD_V_RES,
+        .monochrome = true,
+        .rotation = {
+            .swap_xy = false,
+            .mirror_x = false,
+            .mirror_y = false,
+        }
+    };
+
+    // *out_handle = panel_handle;
+    lv_disp_t *disp = lvgl_port_add_disp(&disp_cfg);
+
+    /* Rotation of the screen */
+    lv_disp_set_rotation(disp, LV_DISP_ROT_NONE);
+
+    *out_handle = disp;
+}
+
+void example_lvgl_demo_ui(lv_disp_t *disp)
+{
+    lv_obj_t *scr = lv_disp_get_scr_act(disp);
+    lv_obj_t *label = lv_label_create(scr);
+    lv_label_set_long_mode(label, LV_LABEL_LONG_SCROLL_CIRCULAR); /* Circular scroll */
+    lv_label_set_text(label, "Hello Espressif, Hello LVGL.");
+    /* Size of the screen (if you use rotation 90 or 270, please set disp->driver->ver_res) */
+    lv_obj_set_width(label, disp->driver->hor_res);
+    lv_obj_align(label, LV_ALIGN_TOP_MID, 0, 0);
+}
+
 extern "C" void app_main() {
+    // Prep the OLED
+    lv_disp_t *disp;
+    display_init(&disp);
+
+// Lock the mutex due to the LVGL APIs are not thread-safe
+    if (lvgl_port_lock(0)) {
+        example_lvgl_demo_ui(disp);
+        // Release the mutex
+        lvgl_port_unlock();
+    }    
+
+    // Prep ADC
     esp_err_t ret;
     uint32_t num_of_bytes_read = 0;
     uint8_t *adc_buffer = (uint8_t *)malloc(TUNER_ADC_FRAME_SIZE);
