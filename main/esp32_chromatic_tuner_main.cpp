@@ -124,17 +124,12 @@ void get_pitch_name_and_cents_from_frequency(float freq, char *pitch_name, int *
 
     *cents = (int)(fractional_note * CENTS_PER_SEMITONE);
     if (*cents >= CENTS_PER_SEMITONE / 2) {
-        ESP_LOGI("debug", "start idx: %d", note_index);
-        // decrement the index
-        note_index--;
-        if (note_index < 0) {
-            note_index = sizeof(note_names);
+        // Adjust the note index so that it still shows the proper note
+        note_index++;
+        if (note_index >= 12) {
+            note_index = 0; // Overflow to the beginning of the note names
         }
-        ESP_LOGI("debug", "  end idx: %d", note_index);
-
         *cents = *cents - CENTS_PER_SEMITONE;
-    } else {
-        ESP_LOGI("debug", "***** idx: %d", note_index);
     }
 
     strncpy(pitch_name, note_names[note_index], strlen(note_names[note_index]));
