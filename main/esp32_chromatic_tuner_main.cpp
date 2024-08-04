@@ -8,6 +8,10 @@
 #include "freertos/task.h"
 #include "freertos/semphr.h"
 #include "esp_adc/adc_continuous.h"
+
+//
+// Q DSP Library for Pitch Detection
+//
 #include <q/pitch/pitch_detector.hpp>
 #include <q/fx/dynamic.hpp>
 #include <q/fx/clip.hpp>
@@ -15,6 +19,7 @@
 #include <q/support/duration.hpp>
 #include <q/support/literals.hpp>
 #include <q/support/pitch_names.hpp>
+#include <q/support/pitch.hpp>
 
 //
 // OLED Support
@@ -66,6 +71,9 @@
 // actual input signal is being read.
 #define TUNER_READING_DIFF_MINIMUM 100
 
+#define A4_FREQ 440.0
+#define CENTS_PER_SEMITONE 100
+
 //
 // OLED Items
 //
@@ -78,6 +86,7 @@
 
 using namespace cycfi::q::pitch_names;
 using frequency = cycfi::q::frequency;
+using pitch = cycfi::q::pitch;
 CONSTEXPR frequency low_fs  = frequency(27.5);
 CONSTEXPR frequency high_fs = frequency(1000.0);
 
@@ -98,6 +107,39 @@ float current_frequency = -1.0f;
 lv_obj_t *frequency_label;
 
 static void oledTask(void *pvParameter);
+
+// Function to calculate the MIDI note number from frequency
+double midi_note_from_frequency(double freq) {
+    return 69 + 12 * log2(freq / A4_FREQ);
+}
+
+// Function to get pitch name and cents from MIDI note number
+void get_pitch_name_and_cents_from_frequency(float freq, char *pitch_name, int *cents) {
+    double midi_note = midi_note_from_frequency(freq);
+    int octave = (int)(midi_note / 12) - 1;
+    int note_index = (int)fmod(midi_note, 12);
+    double fractional_note = midi_note - (int)midi_note;
+
+    static const char *note_names[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+
+    *cents = (int)(fractional_note * CENTS_PER_SEMITONE);
+    if (*cents >= CENTS_PER_SEMITONE / 2) {
+        ESP_LOGI("debug", "start idx: %d", note_index);
+        // decrement the index
+        note_index--;
+        if (note_index < 0) {
+            note_index = sizeof(note_names);
+        }
+        ESP_LOGI("debug", "  end idx: %d", note_index);
+
+        *cents = *cents - CENTS_PER_SEMITONE;
+    } else {
+        ESP_LOGI("debug", "***** idx: %d", note_index);
+    }
+
+    strncpy(pitch_name, note_names[note_index], strlen(note_names[note_index]));
+    pitch_name[strlen(note_names[note_index])] = '\0';
+}
 
 static bool IRAM_ATTR s_conv_done_cb(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *edata, void *user_data)
 {
@@ -452,6 +494,12 @@ static void oledTask(void *pvParameter) {
         // Lock the mutex due to the LVGL APIs are not thread-safe
         if (lvgl_port_lock(0)) {
             display_frequency(current_frequency);
+            if (current_frequency > 0) {
+                char noteName[8];
+                int cents;
+                get_pitch_name_and_cents_from_frequency(current_frequency, noteName, &cents);
+                ESP_LOGI("tuner", "%s - %d", noteName, cents);
+            }
             // Release the mutex
             lvgl_port_unlock();
         }    
