@@ -148,17 +148,29 @@ static bool IRAM_ATTR s_conv_done_cb(adc_continuous_handle_t handle, const adc_c
 void create_frequency_label(lv_disp_t *disp) {
     lv_obj_t *scr = lv_disp_get_scr_act(disp);
     frequency_label = lv_label_create(scr);
+    // lv_label_set_long_mode(frequency_label, LV_LABEL_LONG_CLIP);
     lv_label_set_long_mode(frequency_label, LV_LABEL_LONG_CLIP);
-    lv_label_set_text(frequency_label, "Frequency: -");
+    lv_label_set_text(frequency_label, "-");
     /* Size of the screen (if you use rotation 90 or 270, please set disp->driver->ver_res) */
     lv_obj_set_width(frequency_label, disp->driver->hor_res);
-    lv_obj_align(frequency_label, LV_ALIGN_TOP_MID, 0, 0);
+    // lv_obj_align(frequency_label, LV_ALIGN_TOP_MID, 0, 0);
+    lv_obj_set_style_text_align(frequency_label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(frequency_label, LV_ALIGN_CENTER, 0, 0);
+    // lv_obj_align( lbl, NULL, LV_ALIGN_CENTER, 0, 70 );
+    // lv_obj_set_auto_realign(frequency_label, true);
 }
 
 void display_frequency(float frequency) {
-    lv_label_set_text_fmt(frequency_label, "Frequency: %f", frequency);
+    lv_label_set_text_fmt(frequency_label, "Freq: %f", frequency);
 }
 
+void display_pitch(char *pitch, int cents) {
+    if (strlen(pitch) > 0) {
+        lv_label_set_text_fmt(frequency_label, "%s %d", pitch, cents);
+    } else {
+        lv_label_set_text(frequency_label, "-");
+    }
+}
 
 static void continuous_adc_init(adc_channel_t *channel, uint8_t channel_num, adc_continuous_handle_t *out_handle)
 {
@@ -488,12 +500,15 @@ static void oledTask(void *pvParameter) {
 
         // Lock the mutex due to the LVGL APIs are not thread-safe
         if (lvgl_port_lock(0)) {
-            display_frequency(current_frequency);
+            // display_frequency(current_frequency);
             if (current_frequency > 0) {
                 char noteName[8];
                 int cents;
                 get_pitch_name_and_cents_from_frequency(current_frequency, noteName, &cents);
-                ESP_LOGI("tuner", "%s - %d", noteName, cents);
+                // ESP_LOGI("tuner", "%s - %d", noteName, cents);
+                display_pitch(noteName, cents);
+            } else {
+                display_pitch("", 0);
             }
             // Release the mutex
             lvgl_port_unlock();
