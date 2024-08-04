@@ -59,6 +59,13 @@
 // #define TUNER_ADC_SAMPLE_RATE 20 * 1000
 #define TUNER_ADC_SAMPLE_RATE 10000
 
+// If the difference between the minimum and maximum input values
+// is less than this value, discard the reading and do not evaluate
+// the frequency. This should help cut down on the noise from the
+// OLED and only attempt to read frequency information when an
+// actual input signal is being read.
+#define TUNER_READING_DIFF_MINIMUM 100
+
 //
 // OLED Items
 //
@@ -71,13 +78,12 @@
 
 using namespace cycfi::q::pitch_names;
 using frequency = cycfi::q::frequency;
-CONSTEXPR frequency low_fs  = Fs[1];
+CONSTEXPR frequency low_fs  = frequency(27.5);
+CONSTEXPR frequency high_fs = frequency(1000.0);
 
 #if CONFIG_IDF_TARGET_ESP32
-// static adc_channel_t channel[2] = {ADC_CHANNEL_6, ADC_CHANNEL_7};
 static adc_channel_t channel[1] = {ADC_CHANNEL_4};
 #else
-// static adc_channel_t channel[2] = {ADC_CHANNEL_2, ADC_CHANNEL_3};
 static adc_channel_t channel[1] = {ADC_CHANNEL_1};
 #endif
 
@@ -88,6 +94,11 @@ using std::fixed;
 static TaskHandle_t s_task_handle;
 static const char *TAG = "TUNER";
 
+float current_frequency = -1.0f;
+lv_obj_t *frequency_label;
+
+static void oledTask(void *pvParameter);
+
 static bool IRAM_ATTR s_conv_done_cb(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *edata, void *user_data)
 {
     BaseType_t mustYield = pdFALSE;
@@ -96,6 +107,21 @@ static bool IRAM_ATTR s_conv_done_cb(adc_continuous_handle_t handle, const adc_c
 
     return (mustYield == pdTRUE);
 }
+
+void create_frequency_label(lv_disp_t *disp) {
+    lv_obj_t *scr = lv_disp_get_scr_act(disp);
+    frequency_label = lv_label_create(scr);
+    lv_label_set_long_mode(frequency_label, LV_LABEL_LONG_CLIP);
+    lv_label_set_text(frequency_label, "Frequency: -");
+    /* Size of the screen (if you use rotation 90 or 270, please set disp->driver->ver_res) */
+    lv_obj_set_width(frequency_label, disp->driver->hor_res);
+    lv_obj_align(frequency_label, LV_ALIGN_TOP_MID, 0, 0);
+}
+
+void display_frequency(float frequency) {
+    lv_label_set_text_fmt(frequency_label, "Frequency: %f", frequency);
+}
+
 
 static void continuous_adc_init(adc_channel_t *channel, uint8_t channel_num, adc_continuous_handle_t *out_handle)
 {
@@ -142,8 +168,8 @@ static void display_init(lv_disp_t **out_handle) {
         .scl_io_num = SCL_OLED,
         .clk_source = I2C_CLK_SRC_DEFAULT,
         .glitch_ignore_cnt = 7,
-        .intr_priority = 1,
-        .trans_queue_depth = 10,
+        // .intr_priority = 1,
+        // .trans_queue_depth = 10,
         .flags = {
             .enable_internal_pullup = true // Internal pull-up resistor.
         }
@@ -174,14 +200,14 @@ static void display_init(lv_disp_t **out_handle) {
     };
     ESP_ERROR_CHECK(esp_lcd_new_panel_io_i2c_v2(bus_handle, &io_config, &io_handle));
 
-    esp_lcd_panel_ssd1306_config_t ssd1306_config = {
-        .height = 64
-    };
     esp_lcd_panel_dev_config_t panel_config = {
         .reset_gpio_num = RST_OLED,
         .bits_per_pixel = 1,
-        .vendor_config = &ssd1306_config
     };
+    esp_lcd_panel_ssd1306_config_t ssd1306_config = {
+        .height = 64
+    };
+    panel_config.vendor_config = &ssd1306_config;
 
     esp_lcd_panel_handle_t panel_handle = NULL;
     ESP_ERROR_CHECK(esp_lcd_new_panel_ssd1306(io_handle, &panel_config, &panel_handle));
@@ -215,31 +241,21 @@ static void display_init(lv_disp_t **out_handle) {
     /* Rotation of the screen */
     lv_disp_set_rotation(disp, LV_DISP_ROT_NONE);
 
+    create_frequency_label(disp);
+    
     *out_handle = disp;
 }
 
-void example_lvgl_demo_ui(lv_disp_t *disp)
-{
-    lv_obj_t *scr = lv_disp_get_scr_act(disp);
-    lv_obj_t *label = lv_label_create(scr);
-    lv_label_set_long_mode(label, LV_LABEL_LONG_SCROLL_CIRCULAR); /* Circular scroll */
-    lv_label_set_text(label, "Hello Espressif, Hello LVGL.");
-    /* Size of the screen (if you use rotation 90 or 270, please set disp->driver->ver_res) */
-    lv_obj_set_width(label, disp->driver->hor_res);
-    lv_obj_align(label, LV_ALIGN_TOP_MID, 0, 0);
-}
-
 extern "C" void app_main() {
-    // Prep the OLED
-    lv_disp_t *disp;
-    display_init(&disp);
-
-// Lock the mutex due to the LVGL APIs are not thread-safe
-    if (lvgl_port_lock(0)) {
-        example_lvgl_demo_ui(disp);
-        // Release the mutex
-        lvgl_port_unlock();
-    }    
+    // Start the OLED task
+    xTaskCreatePinnedToCore(
+        oledTask,   // callback function
+        "oled",     // debug name of the task
+        4096,       // stack depth (no idea what this should be)
+        NULL,       // params to pass to the callback function
+        0,          // ux priority - higher value is higher priority
+        NULL,       // handle to the created task - we don't need it
+        0);         // Core ID - since we're not using Bluetooth/Wi-Fi, this can be 0 (the protocol CPU)
 
     // Prep ADC
     esp_err_t ret;
@@ -252,11 +268,10 @@ extern "C" void app_main() {
     memset(adc_buffer, 0xcc, TUNER_ADC_FRAME_SIZE);
 
     // Get the pitch detector ready
-    frequency high_fs   = low_fs * 300;
     q::pitch_detector   pd(low_fs, high_fs, TUNER_ADC_SAMPLE_RATE, -40_dB);
 
     s_task_handle = xTaskGetCurrentTaskHandle();
-
+    
     adc_continuous_handle_t handle = NULL;
     continuous_adc_init(channel, sizeof(channel) / sizeof(adc_channel_t), &handle);
 
@@ -309,6 +324,13 @@ extern "C" void app_main() {
                     }
                 }
 
+                // Bail out if the input does not meet the minimum criteria
+                auto peakToPeakValue = maxVal - minVal;
+                if (peakToPeakValue < TUNER_READING_DIFF_MINIMUM) {
+                    current_frequency = -1; // Indicate to the UI that there's no frequency available
+                    continue;
+                }
+
                 // Normalize the values between -1.0 and +1.0 before
                 // processing with qlib.
                 float range = maxVal - minVal;
@@ -327,11 +349,11 @@ extern "C" void app_main() {
                 auto                        min_period = as_float(high_fs.period()) * TUNER_ADC_SAMPLE_RATE;
                 
                 q::peak_envelope_follower   env{ 30_ms, TUNER_ADC_SAMPLE_RATE };
-                q::one_pole_lowpass         lp{ high_fs, TUNER_ADC_SAMPLE_RATE };
-                q::one_pole_lowpass         lp2{ low_fs, TUNER_ADC_SAMPLE_RATE };
+                q::one_pole_lowpass         lp{high_fs, TUNER_ADC_SAMPLE_RATE};
+                q::one_pole_lowpass         lp2(low_fs, TUNER_ADC_SAMPLE_RATE);
 
-                constexpr float             slope = 1.0f/4;
-                constexpr float             makeup_gain = 4;
+                constexpr float             slope = 1.0f/2;
+                constexpr float             makeup_gain = 2;
                 q::compressor               comp{ -18_dB, slope };
                 q::clip                     clip;
 
@@ -339,7 +361,7 @@ extern "C" void app_main() {
                 float                       release_threshold = lin_float(-60_dB);
                 float                       threshold = onset_threshold;
 
-                std::uint64_t               nanoseconds = 0;
+                // std::uint64_t               nanoseconds = 0;
 
                 bool calculatedAFrequency = false;
                 for (auto i = 0; i < valuesStored; ++i) {
@@ -352,8 +374,8 @@ extern "C" void app_main() {
                     // NOT work. They probably just need to be tweaked a little.
 
                     // // Bandpass filter
-                    // s = lp(s);
-                    // s -= lp2(s);
+                    s = lp(s);
+                    s -= lp2(s);
 
                     // // Envelope
                     // auto e = env(std::abs(static_cast<int>(s)));
@@ -376,11 +398,11 @@ extern "C" void app_main() {
                     // }
 
                     // Pitch Detect
-                    auto start = std::chrono::high_resolution_clock::now();
+                    // auto start = std::chrono::high_resolution_clock::now();
                     bool ready = pd(s);
-                    auto elapsed = std::chrono::high_resolution_clock::now() - start;
-                    auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(elapsed);
-                    nanoseconds += duration.count();
+                    // auto elapsed = std::chrono::high_resolution_clock::now() - start;
+                    // auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(elapsed);
+                    // nanoseconds += duration.count();
 
                     calculatedAFrequency = ready;
                     // // Print the predicted frequency
@@ -395,7 +417,8 @@ extern "C" void app_main() {
                 // auto f = pd.get_frequency() / as_double(high_fs);
                 if (calculatedAFrequency) {
                     auto f = pd.get_frequency();
-                    ESP_LOGI("QLib", "Frequency: %f", f);
+                    current_frequency = f;
+                    // ESP_LOGI("QLib", "Frequency: %f", f);
                 }
 
                 /**
@@ -415,4 +438,22 @@ extern "C" void app_main() {
 
     ESP_ERROR_CHECK(adc_continuous_stop(handle));
     ESP_ERROR_CHECK(adc_continuous_deinit(handle));
+}
+
+static void oledTask(void *pvParameter) {
+    // Prep the OLED
+    lv_disp_t *disp = NULL;
+    display_init(&disp);
+
+    while(1) {
+        vTaskDelay(pdMS_TO_TICKS(100)); // ~1/10 of a second
+        lv_task_handler();
+
+        // Lock the mutex due to the LVGL APIs are not thread-safe
+        if (lvgl_port_lock(0)) {
+            display_frequency(current_frequency);
+            // Release the mutex
+            lvgl_port_unlock();
+        }    
+    }
 }
