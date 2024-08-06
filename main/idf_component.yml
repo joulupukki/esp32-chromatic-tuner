@@ -1,7 +1,7 @@
 ## IDF Component Manager Manifest File
 dependencies:
   lvgl/lvgl: "==8.4.0"
-  espressif/esp_lvgl_port: "^2.2.2"
+  espressif/esp_lvgl_port: "==2.2.0"
   ## Required IDF version
   idf:
     version: ">=4.1.0"
