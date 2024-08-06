@@ -54,15 +54,19 @@
 
 // #define TUNER_ADC_BUFFER_POOL_SIZE    2048 * SOC_ADC_DIGI_DATA_BYTES_PER_CONV
 // #define TUNER_ADC_FRAME_SIZE  512 * SOC_ADC_DIGI_DATA_BYTES_PER_CONV
-#define TUNER_ADC_BUFFER_POOL_SIZE      2048
-#define TUNER_ADC_FRAME_SIZE            512
+// #define TUNER_ADC_BUFFER_POOL_SIZE      2048
+// #define TUNER_ADC_FRAME_SIZE            512
+#define TUNER_ADC_BUFFER_POOL_SIZE      1024
+#define TUNER_ADC_FRAME_SIZE            256
 
 // The minimum threshold sample frequency is 20 * 1000 according
 // to esp-idf/components/soc/esp32/include/soc/soc_caps.h.
 // As far as I understand, this is the frequency sampling
 // rate (Samples Per Second/sps).
 // #define TUNER_ADC_SAMPLE_RATE 20 * 1000
-#define TUNER_ADC_SAMPLE_RATE 10000
+// #define TUNER_ADC_SAMPLE_RATE 10000
+// #define TUNER_ADC_SAMPLE_RATE 5000
+#define TUNER_ADC_SAMPLE_RATE 5000
 
 // If the difference between the minimum and maximum input values
 // is less than this value, discard the reading and do not evaluate
@@ -377,6 +381,7 @@ extern "C" void app_main() {
                 auto peakToPeakValue = maxVal - minVal;
                 if (peakToPeakValue < TUNER_READING_DIFF_MINIMUM) {
                     current_frequency = -1; // Indicate to the UI that there's no frequency available
+                    pd.reset();
                     continue;
                 }
 
@@ -386,6 +391,7 @@ extern "C" void app_main() {
                 float midVal = range / 2;
                 // ESP_LOGI("min, max, range, mid:", "%f, %f, %f, %f", minVal, maxVal, range, midVal);
                 for (auto i = 0; i < valuesStored; i++) {
+                    // ESP_LOGI("adc", "%f", in[i]);
                     float newPosition = in[i] - midVal - minVal;
                     float normalizedValue = newPosition / midVal;
                     // ESP_LOGI("norm-val", "%f is now %f", in[i], normalizedValue);
