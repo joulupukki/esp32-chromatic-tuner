@@ -1,3 +1,6 @@
 [submodule "extra_components/q"]
 	path = extra_components/q
-	url = https://github.com/cycfi/q
+	url = https://github.com/joulupukki/q
+[submodule "extra_components/q-infra"]
+	path = extra_components/q-infra
+	url = https://github.com/joulupukki/q-infra
