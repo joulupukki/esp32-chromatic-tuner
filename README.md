@@ -29,3 +29,4 @@ Dev board is the Heltec WiFi Kit 32 (V3): https://heltec.org/project/wifi-kit32-
     - Use the Command Palette and select `ESP-IDF: Build your Project`
 11. Assuming step #9 worked, Build and install the software
     - Use the Command Palette and select `ESP-IDF: Build, Flash, and Start a Monitor on your Device`
+    - To stop monitoring the output, press Control+T, then X
