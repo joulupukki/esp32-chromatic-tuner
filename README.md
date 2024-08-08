@@ -10,6 +10,7 @@ Dev board is the Heltec WiFi Kit 32 (V3): https://heltec.org/project/wifi-kit32-
 3. Configure the ESP-IDF extension by using the express or advanced mode
     - Be sure to choose **v5.3** as the version of ESP-IDF to use
     - You may need to use advanced mode to be able to select the correct location for python3
+    - If pip error, navigate to: C:\Espressif\tools\idf-python\3.11.2> and run: python -m ensurepip --upgrade
 4. Make sure you have `git` installed
 5. Clone this github project
 6. From a terminal go into the project and do this:
