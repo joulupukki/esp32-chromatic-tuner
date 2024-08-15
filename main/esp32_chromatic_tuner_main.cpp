@@ -113,6 +113,11 @@ RollingAverage avg_frequency(SMOOTHING_WINDOW_SIZE);
 float current_frequency = -1.0f;
 
 lv_obj_t *frequency_label;
+lv_obj_t *pitch_indicator_bar;
+lv_obj_t *pitch_target_bar_top;
+lv_obj_t *pitch_target_bar_bottom;
+lv_coord_t screen_width = 0;
+lv_coord_t screen_height = 0;
 
 static void oledTask(void *pvParameter);
 
@@ -163,9 +168,47 @@ void create_frequency_label(lv_disp_t *disp) {
     lv_obj_set_width(frequency_label, disp->driver->hor_res);
     // lv_obj_align(frequency_label, LV_ALIGN_TOP_MID, 0, 0);
     lv_obj_set_style_text_align(frequency_label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_align(frequency_label, LV_ALIGN_CENTER, 0, 0);
+    // lv_obj_align(frequency_label, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_align(frequency_label, LV_ALIGN_BOTTOM_MID, 0, 0);
     // lv_obj_align( lbl, NULL, LV_ALIGN_CENTER, 0, 70 );
     // lv_obj_set_auto_realign(frequency_label, true);
+}
+
+void create_indicators(lv_disp_t *disp) {
+    lv_obj_t *scr = lv_disp_get_scr_act(disp);
+    screen_width = lv_obj_get_width(scr);
+    screen_height = lv_obj_get_height(scr);
+
+    //
+    // Create the indicator bar. This is the bar
+    // that moves around during tuning.
+    lv_obj_t * rect = lv_obj_create(scr);
+
+    // Set the rectangle's size and position
+    lv_obj_set_size(rect, 6, screen_height / 3);
+    lv_obj_align(rect, LV_ALIGN_TOP_MID, 0, 0);
+    // lv_obj_align(rect, LV_ALIGN_CENTER, 0, 0);
+
+    // Set the rectangle's style (optional)
+    lv_obj_set_style_bg_color(rect, lv_color_white(), LV_PART_MAIN);
+
+    pitch_indicator_bar = rect;
+
+    //
+    // Create the target bar. This is the bar
+    // that stays put and indicates where tuning
+    // is centered.
+    rect = lv_obj_create(scr);
+    lv_obj_set_size(rect, 6, screen_height / 6);
+    lv_obj_align(rect, LV_ALIGN_TOP_MID, 0, 0);
+    lv_obj_set_style_bg_color(rect, lv_color_white(), LV_PART_MAIN);
+    pitch_target_bar_top = rect;
+
+    rect = lv_obj_create(scr);
+    lv_obj_set_size(rect, 6, screen_height / 6);
+    lv_obj_align(rect, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_set_style_bg_color(rect, lv_color_white(), LV_PART_MAIN);
+    pitch_target_bar_bottom = rect;
 }
 
 void display_frequency(float frequency) {
@@ -175,8 +218,27 @@ void display_frequency(float frequency) {
 void display_pitch(char *pitch, int cents) {
     if (strlen(pitch) > 0) {
         lv_label_set_text_fmt(frequency_label, "%s %d", pitch, cents);
+
+        // Calculate where the indicator bar should be left-to right based on the cents
+
+        auto cents_per_side = CENTS_PER_SEMITONE / 2;
+        lv_coord_t half_width = screen_width / 2;
+        float cents_percentage = (float)cents / (float)cents_per_side;
+        lv_coord_t indicator_x_pos = (lv_coord_t)(half_width * cents_percentage);
+
+        lv_obj_align(pitch_indicator_bar, LV_ALIGN_TOP_MID, indicator_x_pos, 0);
+
+        // Make the two bars show up
+        lv_obj_set_style_bg_color(pitch_indicator_bar, lv_color_black(), LV_PART_MAIN);
+        lv_obj_set_style_bg_color(pitch_target_bar_top, lv_color_black(), LV_PART_MAIN);
+        lv_obj_set_style_bg_color(pitch_target_bar_bottom, lv_color_black(), LV_PART_MAIN);
     } else {
         lv_label_set_text(frequency_label, "-");
+
+        // Make the two bars hide themselves
+        lv_obj_set_style_bg_color(pitch_indicator_bar, lv_color_white(), LV_PART_MAIN);
+        lv_obj_set_style_bg_color(pitch_target_bar_top, lv_color_white(), LV_PART_MAIN);
+        lv_obj_set_style_bg_color(pitch_target_bar_bottom, lv_color_white(), LV_PART_MAIN);
     }
 }
 
@@ -299,6 +361,7 @@ static void display_init(lv_disp_t **out_handle) {
     lv_disp_set_rotation(disp, LV_DISP_ROT_NONE);
 
     create_frequency_label(disp);
+    create_indicators(disp);
     
     *out_handle = disp;
 }
