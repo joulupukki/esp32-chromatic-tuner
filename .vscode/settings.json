@@ -5,5 +5,10 @@
         "target/esp32s3.cfg"
     ],
     "idf.port": "/dev/tty.usbserial-0001",
-    "idf.flashType": "UART"
+    "idf.flashType": "UART",
+    "files.associations": {
+        "bitset": "cpp",
+        "future": "cpp",
+        "optional": "cpp"
+    }
 }

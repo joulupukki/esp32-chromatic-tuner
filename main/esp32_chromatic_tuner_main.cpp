@@ -8,6 +8,7 @@
 #include "freertos/task.h"
 #include "freertos/semphr.h"
 #include "esp_adc/adc_continuous.h"
+#include "rolling_average.hpp"
 
 //
 // Q DSP Library for Pitch Detection
@@ -52,6 +53,7 @@
 #define TUNER_ADC_GET_DATA(p_data)        ((p_data)->type2.data)
 #endif
 
+#define SMOOTHING_WINDOW_SIZE           2
 // #define TUNER_ADC_BUFFER_POOL_SIZE    2048 * SOC_ADC_DIGI_DATA_BYTES_PER_CONV
 // #define TUNER_ADC_FRAME_SIZE  512 * SOC_ADC_DIGI_DATA_BYTES_PER_CONV
 // #define TUNER_ADC_BUFFER_POOL_SIZE      2048
@@ -107,7 +109,9 @@ using std::fixed;
 static TaskHandle_t s_task_handle;
 static const char *TAG = "TUNER";
 
+RollingAverage avg_frequency(SMOOTHING_WINDOW_SIZE);
 float current_frequency = -1.0f;
+
 lv_obj_t *frequency_label;
 
 static void oledTask(void *pvParameter);
@@ -381,6 +385,7 @@ extern "C" void app_main() {
                 auto peakToPeakValue = maxVal - minVal;
                 if (peakToPeakValue < TUNER_READING_DIFF_MINIMUM) {
                     current_frequency = -1; // Indicate to the UI that there's no frequency available
+                    avg_frequency.reset();
                     pd.reset();
                     continue;
                 }
@@ -472,8 +477,13 @@ extern "C" void app_main() {
                 // auto f = pd.get_frequency() / as_double(high_fs);
                 if (calculatedAFrequency) {
                     auto f = pd.get_frequency();
-                    current_frequency = f;
+                    current_frequency = avg_frequency.rollingAverage(f);
+                    // current_frequency = f;
                     // ESP_LOGI("QLib", "Frequency: %f", f);
+                    // ESP_LOGI("QLib", "%f - %f", f, current_frequency);
+                    
+                    // Store the frequency in the smoothing array
+
                 }
 
                 /**
