@@ -9,7 +9,7 @@ The circuit runs on 5V which can be sourced from USB or an external source.
 From there it must be stepped down to within the range of the esp32. R1 and R2 make up a voltage divider that puts the center of the signal at 1.56v.
 
 ## Signal filtering
-[R5 and C3 form a LPF] (https://en.wikipedia.org/wiki/Low-pass_filter) at 590 Hz  
+[R5 and C3 form a LPF](https://en.wikipedia.org/wiki/Low-pass_filter) at 590 Hz  
 R3 and C2 form a HPF at 53 Hz
 
 ## Voltage regulation
