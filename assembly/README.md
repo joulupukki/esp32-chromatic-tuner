@@ -1,7 +1,7 @@
 # Overview
 
 The tuner code needs a circuit to do a few things. Primarily:
-- Offset the signal voltage to put it in the center of the esp32 range
+- Offset the signal voltage to put it in the center of the esp32 3.1v range
 - Filter noise in various ways
 
 ## Voltage divider offset voltage
@@ -13,5 +13,5 @@ R5 and C3 form a LPF at 590 Hz
 R3 and C2 form a HPF at 53 Hz
 
 ## Voltage regulation
-While USB power can be used, a 7805 allows the circuit to operate off of a 9v power supply. C10-13 provide noise filtering.
+While USB power can be used, a 7805 allows the circuit to operate off of an external 9v power supply. C10-13 provide noise filtering.
 D1 is polarity protection. D2 protects the regulator when powering via USB.
