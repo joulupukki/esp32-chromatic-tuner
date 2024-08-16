@@ -1,12 +1,5 @@
-#include <cmath>
-#include <string.h>
-#include <stdio.h>
-#include "sdkconfig.h"
 #include "esp_log.h"
-#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "freertos/semphr.h"
 #include "esp_adc/adc_continuous.h"
 #include "exponential_smoother.hpp"
 
@@ -26,14 +19,9 @@
 // OLED Support
 //
 #include "pins_heltec.h" // taken from the Heltec Library to get the pins needed to power and control the OLED
-#include "lvgl.h"
 #include "esp_lcd_panel_vendor.h"
-#include "esp_lcd_panel_io.h"
-#include "esp_lcd_panel_ops.h"
 #include "driver/i2c_master.h"
-#include "esp_lcd_io_i2c.h"
 #include "esp_lvgl_port.h"
-#include "esp_lvgl_port_compatibility.h"
 
 #define TUNER_ADC_UNIT                    ADC_UNIT_1
 #define _TUNER_ADC_UNIT_STR(unit)         #unit
