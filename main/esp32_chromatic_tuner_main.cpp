@@ -120,6 +120,7 @@ lv_coord_t screen_width = 0;
 lv_coord_t screen_height = 0;
 
 static void oledTask(void *pvParameter);
+static void readAndDetectTask(void *pvParameter);
 
 // Function to calculate the MIDI note number from frequency
 double midi_note_from_frequency(double freq) {
@@ -367,16 +368,57 @@ static void display_init(lv_disp_t **out_handle) {
 }
 
 extern "C" void app_main() {
-    // Start the OLED task
+    // Start the Display Task
     xTaskCreatePinnedToCore(
-        oledTask,   // callback function
-        "oled",     // debug name of the task
-        4096,       // stack depth (no idea what this should be)
-        NULL,       // params to pass to the callback function
-        0,          // ux priority - higher value is higher priority
-        NULL,       // handle to the created task - we don't need it
-        0);         // Core ID - since we're not using Bluetooth/Wi-Fi, this can be 0 (the protocol CPU)
+        oledTask,           // callback function
+        "oled",             // debug name of the task
+        4096,               // stack depth (no idea what this should be)
+        NULL,               // params to pass to the callback function
+        0,                  // ux priority - higher value is higher priority
+        NULL,               // handle to the created task - we don't need it
+        0                   // Core ID - since we're not using Bluetooth/Wi-Fi, this can be 0 (the protocol CPU)
+    );
 
+    // Start the Pitch Reading & Detection Task
+    xTaskCreatePinnedToCore(
+        readAndDetectTask,  // callback function
+        "detect",           // debug name of the task
+        4096,               // stack depth (no idea what this should be)
+        NULL,               // params to pass to the callback function
+        10,                 // ux priority - higher value is higher priority
+        NULL,               // handle to the created task - we don't need it
+        1                   // Core ID
+    );
+}
+
+static void oledTask(void *pvParameter) {
+    // Prep the OLED
+    lv_disp_t *disp = NULL;
+    display_init(&disp);
+
+    while(1) {
+        vTaskDelay(pdMS_TO_TICKS(30)); // ~33 times per second
+        lv_task_handler();
+
+        // Lock the mutex due to the LVGL APIs are not thread-safe
+        if (lvgl_port_lock(0)) {
+            // display_frequency(current_frequency);
+            if (current_frequency > 0) {
+                char noteName[8];
+                int cents;
+                get_pitch_name_and_cents_from_frequency(current_frequency, noteName, &cents);
+                // ESP_LOGI("tuner", "%s - %d", noteName, cents);
+                display_pitch(noteName, cents);
+            } else {
+                display_pitch("", 0);
+            }
+            // Release the mutex
+            lvgl_port_unlock();
+        }    
+    }
+}
+
+static void readAndDetectTask(void *pvParameter) {
     // Prep ADC
     esp_err_t ret;
     uint32_t num_of_bytes_read = 0;
@@ -566,31 +608,4 @@ extern "C" void app_main() {
 
     ESP_ERROR_CHECK(adc_continuous_stop(handle));
     ESP_ERROR_CHECK(adc_continuous_deinit(handle));
-}
-
-static void oledTask(void *pvParameter) {
-    // Prep the OLED
-    lv_disp_t *disp = NULL;
-    display_init(&disp);
-
-    while(1) {
-        vTaskDelay(pdMS_TO_TICKS(30)); // ~33 times per second
-        lv_task_handler();
-
-        // Lock the mutex due to the LVGL APIs are not thread-safe
-        if (lvgl_port_lock(0)) {
-            // display_frequency(current_frequency);
-            if (current_frequency > 0) {
-                char noteName[8];
-                int cents;
-                get_pitch_name_and_cents_from_frequency(current_frequency, noteName, &cents);
-                // ESP_LOGI("tuner", "%s - %d", noteName, cents);
-                display_pitch(noteName, cents);
-            } else {
-                display_pitch("", 0);
-            }
-            // Release the mutex
-            lvgl_port_unlock();
-        }    
-    }
 }
