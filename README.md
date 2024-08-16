@@ -31,3 +31,6 @@ Dev board is the Heltec WiFi Kit 32 (V3): https://heltec.org/project/wifi-kit32-
 11. Assuming step #9 worked, Build and install the software
     - Use the Command Palette and select `ESP-IDF: Build, Flash, and Start a Monitor on your Device`
     - To stop monitoring the output, press Control+T, then X
+    - Windows Only: If you receive an error while building, try selecting each port in the list and if none build correctly, follow these instructions:
+        - Download and install the CP210x Windows Drivers from Silicon Labs
+        - A new port should then show up in the list
