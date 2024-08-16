@@ -123,7 +123,6 @@ double midi_note_from_frequency(double freq) {
 // Function to get pitch name and cents from MIDI note number
 void get_pitch_name_and_cents_from_frequency(float freq, char *pitch_name, int *cents) {
     double midi_note = midi_note_from_frequency(freq);
-    int octave = (int)(midi_note / 12) - 1;
     int note_index = (int)fmod(midi_note, 12);
     double fractional_note = midi_note - (int)midi_note;
 
@@ -243,6 +242,9 @@ static void continuous_adc_init(adc_channel_t *channel, uint8_t channel_num, adc
     adc_continuous_handle_cfg_t adc_config = {
         .max_store_buf_size = TUNER_ADC_BUFFER_POOL_SIZE,
         .conv_frame_size = TUNER_ADC_FRAME_SIZE,
+        .flags = {
+            .flush_pool = false,
+        },
     };
     ESP_ERROR_CHECK(adc_continuous_new_handle(&adc_config, &handle));
 
@@ -260,9 +262,9 @@ static void continuous_adc_init(adc_channel_t *channel, uint8_t channel_num, adc
         adc_pattern[i].unit = TUNER_ADC_UNIT;
         adc_pattern[i].bit_width = TUNER_ADC_BIT_WIDTH;
 
-        ESP_LOGI(TAG, "adc_pattern[%d].atten is :%"PRIx8, i, adc_pattern[i].atten);
-        ESP_LOGI(TAG, "adc_pattern[%d].channel is :%"PRIx8, i, adc_pattern[i].channel);
-        ESP_LOGI(TAG, "adc_pattern[%d].unit is :%"PRIx8, i, adc_pattern[i].unit);
+        ESP_LOGI(TAG, "adc_pattern[%d].atten is :%" PRIx8, i, adc_pattern[i].atten);
+        ESP_LOGI(TAG, "adc_pattern[%d].channel is :%" PRIx8, i, adc_pattern[i].channel);
+        ESP_LOGI(TAG, "adc_pattern[%d].unit is :%" PRIx8, i, adc_pattern[i].unit);
     }
     dig_cfg.adc_pattern = adc_pattern;
     ESP_ERROR_CHECK(adc_continuous_config(handle, &dig_cfg));
@@ -309,7 +311,7 @@ static void display_init(lv_disp_t **out_handle) {
         .dc_bit_offset = 6,       // refer to LCD spec
         .lcd_cmd_bits = LCD_CMD_BITS,
         .lcd_param_bits = LCD_CMD_BITS,
-        .scl_speed_hz = LCD_PIXEL_CLOCK_HZ,
+        .scl_speed_hz = LCD_PIXEL_CLOCK_HZ
     };
     ESP_ERROR_CHECK(esp_lcd_new_panel_io_i2c_v2(bus_handle, &io_config, &io_handle));
 

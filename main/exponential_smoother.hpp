@@ -27,7 +27,7 @@ public:
     }
 
     void reset() {
-        values.empty();
+        (void)values.empty();
     }
 
 private:
