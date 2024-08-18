@@ -27,6 +27,7 @@
 #include "esp_lcd_panel_vendor.h"
 #include "driver/i2c_master.h"
 #include "esp_lvgl_port.h"
+#include "lvgl.h"
 
 #define TUNER_ADC_UNIT                    ADC_UNIT_1
 #define _TUNER_ADC_UNIT_STR(unit)         #unit
@@ -72,6 +73,10 @@
 
 #define A4_FREQ 440.0
 #define CENTS_PER_SEMITONE 100
+
+#define INDICATOR_SEGMENTS 17 // num of visual segments
+#define IN_TUNE_CENTS_WIDTH 4 // num of cents around the 0 point considered as "in tune"
+#define PITCH_INDICATOR_BAR_WIDTH 8
 
 //
 // OLED Items
@@ -156,6 +161,12 @@ void create_frequency_label(lv_disp_t *disp) {
     frequency_label = lv_label_create(scr);
     // lv_label_set_long_mode(frequency_label, LV_LABEL_LONG_CLIP);
     lv_label_set_long_mode(frequency_label, LV_LABEL_LONG_CLIP);
+
+    // lv_style_t style;
+    // lv_style_init(&style);
+    // lv_style_set_text_font(&style, &lv_font_montserrat_32);
+    // lv_obj_add_style(frequency_label, &style, 0); // This line makes the app crash
+
     lv_label_set_text(frequency_label, "-");
     /* Size of the screen (if you use rotation 90 or 270, please set disp->driver->ver_res) */
     lv_obj_set_width(frequency_label, disp->driver->hor_res);
@@ -178,7 +189,7 @@ void create_indicators(lv_disp_t *disp) {
     lv_obj_t * rect = lv_obj_create(scr);
 
     // Set the rectangle's size and position
-    lv_obj_set_size(rect, 6, screen_height / 3);
+    lv_obj_set_size(rect, PITCH_INDICATOR_BAR_WIDTH, screen_height / 3);
     lv_obj_align(rect, LV_ALIGN_TOP_MID, 0, 0);
     // lv_obj_align(rect, LV_ALIGN_CENTER, 0, 0);
 
@@ -204,6 +215,7 @@ void create_indicators(lv_disp_t *disp) {
     pitch_target_bar_bottom = rect;
 }
 
+// This function is for debug and will just show the frequency and nothing else
 void display_frequency(float frequency) {
     lv_label_set_text_fmt(frequency_label, "Freq: %f", frequency);
 }
@@ -213,11 +225,19 @@ void display_pitch(char *pitch, int cents) {
         lv_label_set_text_fmt(frequency_label, "%s %d", pitch, cents);
 
         // Calculate where the indicator bar should be left-to right based on the cents
-
+        lv_coord_t indicator_x_pos = (lv_coord_t)0.0;
         auto cents_per_side = CENTS_PER_SEMITONE / 2;
         lv_coord_t half_width = screen_width / 2;
-        float cents_percentage = (float)cents / (float)cents_per_side;
-        lv_coord_t indicator_x_pos = (lv_coord_t)(half_width * cents_percentage);
+        if (abs(cents) <= IN_TUNE_CENTS_WIDTH / 2) {
+            // Show this as perfectly in tune
+            indicator_x_pos = 0;
+        } else {
+            float segment_width_cents = CENTS_PER_SEMITONE / INDICATOR_SEGMENTS; // TODO: Make this a static var
+            int segment_index = cents / segment_width_cents;
+
+            float segment_width_pixels = screen_width / INDICATOR_SEGMENTS;
+            indicator_x_pos = segment_index * segment_width_pixels; 
+        }
 
         lv_obj_align(pitch_indicator_bar, LV_ALIGN_TOP_MID, indicator_x_pos, 0);
 
