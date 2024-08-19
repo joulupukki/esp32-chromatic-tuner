@@ -6,7 +6,9 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "esp_adc/adc_continuous.h"
+
 #include "exponential_smoother.hpp"
+#include "OneEuroFilter.h"
 
 //
 // Q DSP Library for Pitch Detection
@@ -107,8 +109,15 @@ using std::fixed;
 static TaskHandle_t s_task_handle;
 static const char *TAG = "TUNER";
 
-ExponentialSmoother smoother(SMOOTHING_AMOUNT);
+// ExponentialSmoother smoother(SMOOTHING_AMOUNT);
 float current_frequency = -1.0f;
+
+// 1EU Filter Initialization Params
+static const double euFilterFreq = 0; // I believe this means no guess as to what the incoming frequency will initially be
+static const double mincutoff = 1;
+static const double beta = 0.007;
+static const double dcutoff = 1;
+OneEuroFilter oneEUFilter(euFilterFreq, mincutoff, beta, dcutoff) ;
 
 lv_obj_t *frequency_label;
 lv_obj_t *pitch_indicator_bar;
@@ -505,7 +514,8 @@ static void readAndDetectTask(void *pvParameter) {
                 auto peakToPeakValue = maxVal - minVal;
                 if (peakToPeakValue < TUNER_READING_DIFF_MINIMUM) {
                     current_frequency = -1; // Indicate to the UI that there's no frequency available
-                    smoother.reset();
+                    // smoother.reset();
+                    oneEUFilter.reset();
                     pd.reset();
                     continue;
                 }
@@ -597,7 +607,13 @@ static void readAndDetectTask(void *pvParameter) {
                 // auto f = pd.get_frequency() / as_double(high_fs);
                 if (calculatedAFrequency) {
                     auto f = pd.get_frequency();
-                    current_frequency = smoother.smooth(f);
+
+                    // Simple Expoential Smoothing
+                    // current_frequency = smoother.smooth(f);
+
+                    // 1EU Filtering
+                    current_frequency = (float)oneEUFilter.filter((double)f);
+
                     // current_frequency = f;
                     // ESP_LOGI("QLib", "Frequency: %f", f);
                     // ESP_LOGI("QLib", "%f - %f", f, current_frequency);
