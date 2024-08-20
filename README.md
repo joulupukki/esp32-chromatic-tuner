@@ -34,3 +34,9 @@ Dev board is the Heltec WiFi Kit 32 (V3): https://heltec.org/project/wifi-kit32-
     - Windows Only: If you receive an error while building, try selecting each port in the list and if none build correctly, follow these instructions:
         - Download and install the CP210x Windows Drivers from Silicon Labs
         - A new port should then show up in the list
+
+## Demo
+
+Here's a simple demo of how the project is coming along as of 20 Aug 2024:
+
+[![Demo Video](https://img.youtube.com/vi/oDtbNevoSJk/0.jpg)](https://www.youtube.com/watch?v=oDtbNevoSJk)
