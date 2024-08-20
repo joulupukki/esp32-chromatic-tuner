@@ -440,7 +440,7 @@ static void oledTask(void *pvParameter) {
     display_init(&disp);
 
     while(1) {
-        vTaskDelay(pdMS_TO_TICKS(30)); // ~33 times per second
+        vTaskDelay(pdMS_TO_TICKS(1)); // ~33 times per second
         lv_task_handler();
 
         // Lock the mutex due to the LVGL APIs are not thread-safe
