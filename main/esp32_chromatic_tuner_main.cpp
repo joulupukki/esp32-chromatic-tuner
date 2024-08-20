@@ -120,13 +120,11 @@ static const double dcutoff = 1;
 OneEuroFilter oneEUFilter(euFilterFreq, mincutoff, beta, dcutoff) ;
 
 lv_obj_t *frequency_label;
-lv_obj_t *neg_cents_label;
-lv_obj_t *pos_cents_label;
+lv_obj_t *cents_label;
 lv_style_t cents_label_style;
 
 lv_obj_t *pitch_indicator_bar;
 lv_obj_t *pitch_target_bar_top;
-lv_obj_t *pitch_target_bar_bottom;
 lv_coord_t screen_width = 0;
 lv_coord_t screen_height = 0;
 
@@ -190,25 +188,19 @@ void create_labels(lv_disp_t *disp) {
     // lv_obj_align( lbl, NULL, LV_ALIGN_CENTER, 0, 70 );
     // lv_obj_set_auto_realign(frequency_label, true);
 
-    neg_cents_label = lv_label_create(scr);
-    pos_cents_label = lv_label_create(scr);
-
+    cents_label = lv_label_create(scr);
+    
     lv_style_init(&cents_label_style);
     lv_style_set_text_font(&cents_label_style, &lv_font_montserrat_14);
-    lv_obj_add_style(neg_cents_label, &cents_label_style, 0);
-    lv_obj_add_style(pos_cents_label, &cents_label_style, 0);
+    lv_obj_add_style(cents_label, &cents_label_style, 0);
 
-    lv_obj_set_width(neg_cents_label, disp->driver->hor_res / 2);
-    lv_obj_set_width(pos_cents_label, disp->driver->hor_res / 2);
+    lv_obj_set_width(cents_label, disp->driver->hor_res / 2);
 
-    lv_obj_set_style_text_align(neg_cents_label, LV_TEXT_ALIGN_LEFT, 0);
-    lv_obj_set_style_text_align(pos_cents_label, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_obj_set_style_text_align(cents_label, LV_TEXT_ALIGN_CENTER, 0);
     
-    lv_obj_align(neg_cents_label, LV_ALIGN_LEFT_MID, 0, 0);
-    lv_obj_align(pos_cents_label, LV_ALIGN_RIGHT_MID, 0, 0);
+    lv_obj_align(cents_label, LV_ALIGN_CENTER, 0, 0);
 
-    lv_obj_add_flag(neg_cents_label, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(pos_cents_label, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(cents_label, LV_OBJ_FLAG_HIDDEN);
 }
 
 void create_indicators(lv_disp_t *disp) {
@@ -240,12 +232,6 @@ void create_indicators(lv_disp_t *disp) {
     lv_obj_align(rect, LV_ALIGN_TOP_MID, 0, 0);
     lv_obj_set_style_bg_color(rect, lv_color_white(), LV_PART_MAIN);
     pitch_target_bar_top = rect;
-
-    rect = lv_obj_create(scr);
-    lv_obj_set_size(rect, 6, screen_height / 6);
-    lv_obj_align(rect, LV_ALIGN_CENTER, 0, 0);
-    lv_obj_set_style_bg_color(rect, lv_color_white(), LV_PART_MAIN);
-    pitch_target_bar_bottom = rect;
 }
 
 // This function is for debug and will just show the frequency and nothing else
@@ -277,34 +263,18 @@ void display_pitch(char *pitch, int cents) {
         // Make the two bars show up
         lv_obj_set_style_bg_color(pitch_indicator_bar, lv_color_black(), LV_PART_MAIN);
         lv_obj_set_style_bg_color(pitch_target_bar_top, lv_color_black(), LV_PART_MAIN);
-        lv_obj_set_style_bg_color(pitch_target_bar_bottom, lv_color_black(), LV_PART_MAIN);
 
-        if (cents == 0) {
-            lv_label_set_text(neg_cents_label, "----");
-            lv_label_set_text(pos_cents_label, "----");
-            lv_obj_clear_flag(neg_cents_label, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_clear_flag(pos_cents_label, LV_OBJ_FLAG_HIDDEN);
-        } else if (cents < 0) {
-            // Show negative cents
-            lv_label_set_text_fmt(neg_cents_label, "%d", cents);
-            lv_obj_clear_flag(neg_cents_label, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_add_flag(pos_cents_label, LV_OBJ_FLAG_HIDDEN);
-        } else if (cents > 0) {
-            // Show positive cents
-            lv_label_set_text_fmt(pos_cents_label, "%d", cents);
-            lv_obj_add_flag(neg_cents_label, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_clear_flag(pos_cents_label, LV_OBJ_FLAG_HIDDEN);
-        }
+        lv_label_set_text_fmt(cents_label, "%d", cents);
+        lv_obj_align(cents_label, LV_ALIGN_CENTER, indicator_x_pos, 4);
+        lv_obj_clear_flag(cents_label, LV_OBJ_FLAG_HIDDEN);
     } else {
         lv_label_set_text(frequency_label, "-");
 
         // Make the two bars hide themselves
         lv_obj_set_style_bg_color(pitch_indicator_bar, lv_color_white(), LV_PART_MAIN);
         lv_obj_set_style_bg_color(pitch_target_bar_top, lv_color_white(), LV_PART_MAIN);
-        lv_obj_set_style_bg_color(pitch_target_bar_bottom, lv_color_white(), LV_PART_MAIN);
 
-        lv_obj_add_flag(neg_cents_label, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_add_flag(pos_cents_label, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(cents_label, LV_OBJ_FLAG_HIDDEN);
     }
 }
 
