@@ -272,7 +272,7 @@ void display_pitch(char *pitch, int cents) {
             indicator_x_pos = segment_index * segment_width_pixels; 
         }
 
-        lv_obj_align(pitch_indicator_bar, LV_ALIGN_TOP_MID, indicator_x_pos, 0);
+        lv_obj_align(pitch_indicator_bar, LV_ALIGN_TOP_MID, indicator_x_pos, 18);
 
         // Make the two bars show up
         lv_obj_set_style_bg_color(pitch_indicator_bar, lv_color_black(), LV_PART_MAIN);
