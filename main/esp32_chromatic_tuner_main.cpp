@@ -280,9 +280,10 @@ void display_pitch(char *pitch, int cents) {
         lv_obj_set_style_bg_color(pitch_target_bar_bottom, lv_color_black(), LV_PART_MAIN);
 
         if (cents == 0) {
-            // Don't show cents if the tuning is perfect
-            lv_obj_add_flag(neg_cents_label, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_add_flag(pos_cents_label, LV_OBJ_FLAG_HIDDEN);
+            lv_label_set_text(neg_cents_label, "----");
+            lv_label_set_text(pos_cents_label, "----");
+            lv_obj_clear_flag(neg_cents_label, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_clear_flag(pos_cents_label, LV_OBJ_FLAG_HIDDEN);
         } else if (cents < 0) {
             // Show negative cents
             lv_label_set_text_fmt(neg_cents_label, "%d", cents);
