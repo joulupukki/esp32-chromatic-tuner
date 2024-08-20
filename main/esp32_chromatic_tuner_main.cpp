@@ -120,6 +120,10 @@ static const double dcutoff = 1;
 OneEuroFilter oneEUFilter(euFilterFreq, mincutoff, beta, dcutoff) ;
 
 lv_obj_t *frequency_label;
+lv_obj_t *neg_cents_label;
+lv_obj_t *pos_cents_label;
+lv_style_t cents_label_style;
+
 lv_obj_t *pitch_indicator_bar;
 lv_obj_t *pitch_target_bar_top;
 lv_obj_t *pitch_target_bar_bottom;
@@ -165,7 +169,7 @@ static bool IRAM_ATTR s_conv_done_cb(adc_continuous_handle_t handle, const adc_c
     return (mustYield == pdTRUE);
 }
 
-void create_frequency_label(lv_disp_t *disp) {
+void create_labels(lv_disp_t *disp) {
     lv_obj_t *scr = lv_disp_get_scr_act(disp);
     frequency_label = lv_label_create(scr);
     // lv_label_set_long_mode(frequency_label, LV_LABEL_LONG_CLIP);
@@ -185,6 +189,26 @@ void create_frequency_label(lv_disp_t *disp) {
     lv_obj_align(frequency_label, LV_ALIGN_BOTTOM_MID, 0, 0);
     // lv_obj_align( lbl, NULL, LV_ALIGN_CENTER, 0, 70 );
     // lv_obj_set_auto_realign(frequency_label, true);
+
+    neg_cents_label = lv_label_create(scr);
+    pos_cents_label = lv_label_create(scr);
+
+    lv_style_init(&cents_label_style);
+    lv_style_set_text_font(&cents_label_style, &lv_font_montserrat_14);
+    lv_obj_add_style(neg_cents_label, &cents_label_style, 0);
+    lv_obj_add_style(pos_cents_label, &cents_label_style, 0);
+
+    lv_obj_set_width(neg_cents_label, disp->driver->hor_res / 2);
+    lv_obj_set_width(pos_cents_label, disp->driver->hor_res / 2);
+
+    lv_obj_set_style_text_align(neg_cents_label, LV_TEXT_ALIGN_LEFT, 0);
+    lv_obj_set_style_text_align(pos_cents_label, LV_TEXT_ALIGN_RIGHT, 0);
+    
+    lv_obj_align(neg_cents_label, LV_ALIGN_LEFT_MID, 0, 0);
+    lv_obj_align(pos_cents_label, LV_ALIGN_RIGHT_MID, 0, 0);
+
+    lv_obj_add_flag(neg_cents_label, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(pos_cents_label, LV_OBJ_FLAG_HIDDEN);
 }
 
 void create_indicators(lv_disp_t *disp) {
@@ -231,7 +255,7 @@ void display_frequency(float frequency) {
 
 void display_pitch(char *pitch, int cents) {
     if (strlen(pitch) > 0) {
-        lv_label_set_text_fmt(frequency_label, "%s %d", pitch, cents);
+        lv_label_set_text_fmt(frequency_label, "%s", pitch);
 
         // Calculate where the indicator bar should be left-to right based on the cents
         lv_coord_t indicator_x_pos = (lv_coord_t)0.0;
@@ -254,6 +278,22 @@ void display_pitch(char *pitch, int cents) {
         lv_obj_set_style_bg_color(pitch_indicator_bar, lv_color_black(), LV_PART_MAIN);
         lv_obj_set_style_bg_color(pitch_target_bar_top, lv_color_black(), LV_PART_MAIN);
         lv_obj_set_style_bg_color(pitch_target_bar_bottom, lv_color_black(), LV_PART_MAIN);
+
+        if (cents == 0) {
+            // Don't show cents if the tuning is perfect
+            lv_obj_add_flag(neg_cents_label, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(pos_cents_label, LV_OBJ_FLAG_HIDDEN);
+        } else if (cents < 0) {
+            // Show negative cents
+            lv_label_set_text_fmt(neg_cents_label, "%d", cents);
+            lv_obj_clear_flag(neg_cents_label, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(pos_cents_label, LV_OBJ_FLAG_HIDDEN);
+        } else if (cents > 0) {
+            // Show positive cents
+            lv_label_set_text_fmt(pos_cents_label, "%d", cents);
+            lv_obj_add_flag(neg_cents_label, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_clear_flag(pos_cents_label, LV_OBJ_FLAG_HIDDEN);
+        }
     } else {
         lv_label_set_text(frequency_label, "-");
 
@@ -261,6 +301,9 @@ void display_pitch(char *pitch, int cents) {
         lv_obj_set_style_bg_color(pitch_indicator_bar, lv_color_white(), LV_PART_MAIN);
         lv_obj_set_style_bg_color(pitch_target_bar_top, lv_color_white(), LV_PART_MAIN);
         lv_obj_set_style_bg_color(pitch_target_bar_bottom, lv_color_white(), LV_PART_MAIN);
+
+        lv_obj_add_flag(neg_cents_label, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(pos_cents_label, LV_OBJ_FLAG_HIDDEN);
     }
 }
 
@@ -376,6 +419,10 @@ static void display_init(lv_disp_t **out_handle) {
             .swap_xy = false,
             .mirror_x = false,
             .mirror_y = false,
+        },
+        .flags = {
+            .buff_dma = true,
+            .sw_rotate = false
         }
     };
 
@@ -383,9 +430,10 @@ static void display_init(lv_disp_t **out_handle) {
     lv_disp_t *disp = lvgl_port_add_disp(&disp_cfg);
 
     /* Rotation of the screen */
-    lv_disp_set_rotation(disp, LV_DISP_ROT_NONE);
+    // lv_disp_set_rotation(disp, LV_DISP_ROT_NONE);
+    lv_disp_set_rotation(disp, LV_DISP_ROT_270);
 
-    create_frequency_label(disp);
+    create_labels(disp);
     create_indicators(disp);
     
     *out_handle = disp;
