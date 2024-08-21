@@ -7,7 +7,7 @@
 #include "freertos/FreeRTOS.h"
 #include "esp_adc/adc_continuous.h"
 
-// #include "exponential_smoother.hpp" // Not currently used since we're using OneEuroFilter instead.
+#include "exponential_smoother.hpp"
 #include "OneEuroFilter.h"
 
 //
@@ -16,6 +16,7 @@
 #include <q/pitch/pitch_detector.hpp>
 #include <q/fx/dynamic.hpp>
 #include <q/fx/clip.hpp>
+#include <q/fx/signal_conditioner.hpp>
 #include <q/support/decibel.hpp>
 #include <q/support/duration.hpp>
 #include <q/support/literals.hpp>
@@ -116,7 +117,7 @@ static adc_channel_t channel[1] = {ADC_CHANNEL_1};
 static TaskHandle_t s_task_handle;
 static const char *TAG = "TUNER";
 
-// ExponentialSmoother smoother(SMOOTHING_AMOUNT);
+ExponentialSmoother smoother(SMOOTHING_AMOUNT);
 float current_frequency = -1.0f;
 
 // 1EU Filter Initialization Params
@@ -462,6 +463,27 @@ static void readAndDetectTask(void *pvParameter) {
     // Get the pitch detector ready
     q::pitch_detector   pd(low_fs, high_fs, TUNER_ADC_SAMPLE_RATE, -40_dB);
 
+    // auto const&                 bits = pd.bits();
+    // auto const&                 edges = pd.edges();
+    // q::bitstream_acf<>          bacf{ bits };
+    // auto                        min_period = as_float(high_fs.period()) * TUNER_ADC_SAMPLE_RATE;
+    
+    // q::peak_envelope_follower   env{ 30_ms, TUNER_ADC_SAMPLE_RATE };
+    // q::one_pole_lowpass         lp{high_fs, TUNER_ADC_SAMPLE_RATE};
+    // q::one_pole_lowpass         lp2(low_fs, TUNER_ADC_SAMPLE_RATE);
+
+    // constexpr float             slope = 1.0f/2;
+    // constexpr float             makeup_gain = 2;
+    // q::compressor               comp{ -18_dB, slope };
+    // q::clip                     clip;
+
+    // float                       onset_threshold = lin_float(-28_dB);
+    // float                       release_threshold = lin_float(-60_dB);
+    // float                       threshold = onset_threshold;
+
+    auto sc_conf = q::signal_conditioner::config{};
+    auto sig_cond = q::signal_conditioner{sc_conf, low_fs, high_fs, TUNER_ADC_SAMPLE_RATE};
+
     s_task_handle = xTaskGetCurrentTaskHandle();
     
     adc_continuous_handle_t handle = NULL;
@@ -514,8 +536,8 @@ static void readAndDetectTask(void *pvParameter) {
                 auto peakToPeakValue = maxVal - minVal;
                 if (peakToPeakValue < TUNER_READING_DIFF_MINIMUM) {
                     current_frequency = -1; // Indicate to the UI that there's no frequency available
-                    // smoother.reset();
                     oneEUFilter.reset(); // Reset the 1EU filter so the next frequency it detects will be as fast as possible
+                    smoother.reset();
                     pd.reset();
                     continue;
                 }
@@ -532,26 +554,6 @@ static void readAndDetectTask(void *pvParameter) {
                     in[i] = normalizedValue;
                 }
 
-                auto const&                 bits = pd.bits();
-                auto const&                 edges = pd.edges();
-                q::bitstream_acf<>          bacf{ bits };
-                auto                        min_period = as_float(high_fs.period()) * TUNER_ADC_SAMPLE_RATE;
-                
-                q::peak_envelope_follower   env{ 30_ms, TUNER_ADC_SAMPLE_RATE };
-                q::one_pole_lowpass         lp{high_fs, TUNER_ADC_SAMPLE_RATE};
-                q::one_pole_lowpass         lp2(low_fs, TUNER_ADC_SAMPLE_RATE);
-
-                constexpr float             slope = 1.0f/2;
-                constexpr float             makeup_gain = 2;
-                q::compressor               comp{ -18_dB, slope };
-                q::clip                     clip;
-
-                float                       onset_threshold = lin_float(-28_dB);
-                float                       release_threshold = lin_float(-60_dB);
-                float                       threshold = onset_threshold;
-
-                // std::uint64_t               nanoseconds = 0;
-
                 bool calculatedAFrequency = false;
                 for (auto i = 0; i < valuesStored; ++i) {
                     float time = i / float(TUNER_ADC_SAMPLE_RATE);
@@ -562,9 +564,12 @@ static void readAndDetectTask(void *pvParameter) {
                     // because it actually is making the frequency readings
                     // NOT work. They probably just need to be tweaked a little.
 
+                    // Signal Conditioner
+                    s = sig_cond(s);
+
                     // // Bandpass filter
-                    s = lp(s);
-                    s -= lp2(s);
+                    // s = lp(s);
+                    // s -= lp2(s);
 
                     // // Envelope
                     // auto e = env(std::abs(static_cast<int>(s)));
@@ -605,6 +610,7 @@ static void readAndDetectTask(void *pvParameter) {
 
                     // Simple Expoential Smoothing
                     // current_frequency = smoother.smooth(f);
+                    f = smoother.smooth(f);
 
                     // 1EU Filtering
                     current_frequency = (float)oneEUFilter.filter((double)f); // Stores the current frequency in the global current_frequency variable
