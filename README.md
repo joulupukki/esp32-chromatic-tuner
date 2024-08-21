@@ -39,4 +39,4 @@ Dev board is the Heltec WiFi Kit 32 (V3): https://heltec.org/project/wifi-kit32-
 
 Here's a simple demo of how the project is coming along as of 20 Aug 2024:
 
-[![Demo Video](https://img.youtube.com/vi/c0nzL3Yu97s/0.jpg)](https://youtu.be/c0nzL3Yu97s)
+[![Demo Video](https://img.youtube.com/vi/XWTicIlTI_k/0.jpg)](https://youtu.be/XWTicIlTI_k)
