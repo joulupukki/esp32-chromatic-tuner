@@ -93,15 +93,15 @@ using std::fixed;
 //
 // Display/OLED SSD1306 from the Heltec ESP32-S3 WiFi Kit v3
 //
-#define RST_OLED                        GPIO_NUM_21
-#define SCL_OLED                        GPIO_NUM_18
-#define SDA_OLED                        GPIO_NUM_17
+// #define RST_OLED                        GPIO_NUM_21
+// #define SCL_OLED                        GPIO_NUM_18
+// #define SDA_OLED                        GPIO_NUM_17
 
-#define LCD_PIXEL_CLOCK_HZ              500000
-#define LCD_CMD_BITS                    8 // Bit number used to represent command and parameter
-#define LCD_PARAM_BITS                  8
-#define LCD_H_RES                       128
-#define LCD_V_RES                       64
+// #define LCD_PIXEL_CLOCK_HZ              500000
+// #define LCD_CMD_BITS                    8 // Bit number used to represent command and parameter
+// #define LCD_PARAM_BITS                  8
+// #define LCD_H_RES                       128
+// #define LCD_V_RES                       64
 
 using namespace cycfi::q::pitch_names;
 using frequency = cycfi::q::frequency;
@@ -109,11 +109,7 @@ using pitch = cycfi::q::pitch;
 CONSTEXPR frequency low_fs  = frequency(27.5);
 CONSTEXPR frequency high_fs = frequency(1000.0);
 
-#if CONFIG_IDF_TARGET_ESP32
-static adc_channel_t channel[1] = {ADC_CHANNEL_4};
-#else
-static adc_channel_t channel[1] = {ADC_CHANNEL_1};
-#endif
+static adc_channel_t channel[1] = {ADC_CHANNEL_7};
 
 static TaskHandle_t s_task_handle;
 static const char *TAG = "TUNER";
