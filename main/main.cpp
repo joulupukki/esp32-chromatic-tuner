@@ -29,8 +29,10 @@
 #include "lvgl.h"
 #include "esp_lvgl_port.h"
 
-#include "lcd.h"
-#include "touch.h"
+extern "C" { // because these files are C and not C++
+    #include "lcd.h"
+    #include "touch.h"
+}
 
 namespace q = cycfi::q;
 using namespace q::literals;
@@ -44,7 +46,8 @@ using std::fixed;
 #define TUNER_ADC_UNIT_STR(unit)          _TUNER_ADC_UNIT_STR(unit)
 #define TUNER_ADC_CONV_MODE               ADC_CONV_SINGLE_UNIT_1
 #define TUNER_ADC_ATTEN                   ADC_ATTEN_DB_12
-#define TUNER_ADC_BIT_WIDTH               SOC_ADC_DIGI_MAX_BITWIDTH
+// #define TUNER_ADC_BIT_WIDTH               SOC_ADC_DIGI_MAX_BITWIDTH
+#define TUNER_ADC_BIT_WIDTH               12
 
 #if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S2
 #define TUNER_ADC_OUTPUT_TYPE             ADC_DIGI_OUTPUT_FORMAT_TYPE1
@@ -58,14 +61,15 @@ using std::fixed;
 
 #define TUNER_ADC_BUFFER_POOL_SIZE      1024
 #define TUNER_ADC_FRAME_SIZE            256
-#define TUNER_ADC_SAMPLE_RATE           5000
+#define TUNER_ADC_SAMPLE_RATE           20000
 
 // If the difference between the minimum and maximum input values
 // is less than this value, discard the reading and do not evaluate
 // the frequency. This should help cut down on the noise from the
 // OLED and only attempt to read frequency information when an
 // actual input signal is being read.
-#define TUNER_READING_DIFF_MINIMUM      100
+// #define TUNER_READING_DIFF_MINIMUM      100
+#define TUNER_READING_DIFF_MINIMUM      50
 
 //
 // Smoothing
@@ -73,8 +77,9 @@ using std::fixed;
 
 // 1EU Filter
 #define EU_FILTER_ESTIMATED_FREQ        0 // I believe this means no guess as to what the incoming frequency will initially be
-#define EU_FILTER_MIN_CUTOFF            1
-#define EU_FILTER_BETA                  0.007
+#define EU_FILTER_MIN_CUTOFF            0.5
+// #define EU_FILTER_BETA                  0.007
+#define EU_FILTER_BETA                  0.05 // Same as https://github.com/bkshepherd/DaisySeedProjects/blob/main/Software/GuitarPedal/Util/frequency_detector_q.h
 #define EU_FILTER_DERIVATIVE_CUTOFF     1
 
 // Exponential Smoother (not currently used)
@@ -90,24 +95,11 @@ using std::fixed;
 #define IN_TUNE_CENTS_WIDTH             4 // num of cents around the 0 point considered as "in tune"
 #define PITCH_INDICATOR_BAR_WIDTH       8
 
-//
-// Display/OLED SSD1306 from the Heltec ESP32-S3 WiFi Kit v3
-//
-// #define RST_OLED                        GPIO_NUM_21
-// #define SCL_OLED                        GPIO_NUM_18
-// #define SDA_OLED                        GPIO_NUM_17
-
-// #define LCD_PIXEL_CLOCK_HZ              500000
-// #define LCD_CMD_BITS                    8 // Bit number used to represent command and parameter
-// #define LCD_PARAM_BITS                  8
-// #define LCD_H_RES                       128
-// #define LCD_V_RES                       64
-
 using namespace cycfi::q::pitch_names;
 using frequency = cycfi::q::frequency;
 using pitch = cycfi::q::pitch;
-CONSTEXPR frequency low_fs  = frequency(27.5);
-CONSTEXPR frequency high_fs = frequency(1000.0);
+CONSTEXPR frequency low_fs = cycfi::q::pitch_names::C[1];
+CONSTEXPR frequency high_fs = cycfi::q::pitch_names::C[9];
 
 static adc_channel_t channel[1] = {ADC_CHANNEL_7};
 
@@ -451,15 +443,15 @@ extern "C" void app_main() {
     );
 
     // Start the Pitch Reading & Detection Task
-    // xTaskCreatePinnedToCore(
-    //     readAndDetectTask,  // callback function
-    //     "detect",           // debug name of the task
-    //     4096,               // stack depth (no idea what this should be)
-    //     NULL,               // params to pass to the callback function
-    //     10,                 // ux priority - higher value is higher priority
-    //     NULL,               // handle to the created task - we don't need it
-    //     1                   // Core ID
-    // );
+    xTaskCreatePinnedToCore(
+        readAndDetectTask,  // callback function
+        "detect",           // debug name of the task
+        4096,               // stack depth (no idea what this should be)
+        NULL,               // params to pass to the callback function
+        10,                 // ux priority - higher value is higher priority
+        NULL,               // handle to the created task - we don't need it
+        1                   // Core ID
+    );
 }
 
 static void oledTask(void *pvParameter) {
@@ -512,8 +504,8 @@ static void oledTask(void *pvParameter) {
             lvgl_port_unlock();
         }
 
-        // vTaskDelay(pdMS_TO_TICKS(1)); // ~33 times per second
-        vTaskDelay(125 / portTICK_PERIOD_MS); // ?? copied from the ESP32-Cheap-Yellow-Display project
+        vTaskDelay(pdMS_TO_TICKS(1)); // ~33 times per second
+        // vTaskDelay(125 / portTICK_PERIOD_MS); // ?? copied from the ESP32-Cheap-Yellow-Display project
     }
     vTaskDelay(portMAX_DELAY);
 }
@@ -588,6 +580,9 @@ static void readAndDetectTask(void *pvParameter) {
                 float minVal = MAXFLOAT;
                 for (int i = 0; i < num_of_bytes_read; i += SOC_ADC_DIGI_RESULT_BYTES, valuesStored++) {
                     adc_digi_output_data_t *p = (adc_digi_output_data_t*)&adc_buffer[i];
+                    // if (i == 20) {
+                    //     ESP_LOGI(TAG, "read value is: %d", TUNER_ADC_GET_DATA(p));
+                    // }
 
                     // Do a first pass by just storing the raw values into the float array
                     in[valuesStored] = TUNER_ADC_GET_DATA(p);
