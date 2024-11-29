@@ -24,12 +24,13 @@
 #include <q/support/pitch.hpp>
 
 //
-// OLED Support
+// LVGL Support
 //
-#include "esp_lcd_panel_vendor.h"
-#include "driver/i2c_master.h"
-#include "esp_lvgl_port.h"
 #include "lvgl.h"
+#include "esp_lvgl_port.h"
+
+#include "lcd.h"
+#include "touch.h"
 
 namespace q = cycfi::q;
 using namespace q::literals;
@@ -176,15 +177,15 @@ static bool IRAM_ATTR s_conv_done_cb(adc_continuous_handle_t handle, const adc_c
     return (mustYield == pdTRUE);
 }
 
-void create_labels(lv_disp_t *disp) {
-    lv_obj_t *scr = lv_disp_get_scr_act(disp);
+void create_labels() {
+    lv_obj_t *scr = lv_scr_act();
 
     // Frequency Label (the big font at the bottom middle)
     frequency_label = lv_label_create(scr);
     lv_label_set_long_mode(frequency_label, LV_LABEL_LONG_CLIP);
 
     lv_label_set_text(frequency_label, "-");
-    lv_obj_set_width(frequency_label, disp->driver->hor_res);
+    lv_obj_set_width(frequency_label, lv_obj_get_width(scr));
     lv_obj_set_style_text_align(frequency_label, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(frequency_label, LV_ALIGN_BOTTOM_MID, 0, 0);
 
@@ -195,14 +196,14 @@ void create_labels(lv_disp_t *disp) {
     lv_style_set_text_font(&cents_label_style, &lv_font_montserrat_14);
     lv_obj_add_style(cents_label, &cents_label_style, 0);
 
-    lv_obj_set_width(cents_label, disp->driver->hor_res / 2);
+    lv_obj_set_width(cents_label, lv_obj_get_width(scr) / 2);
     lv_obj_set_style_text_align(cents_label, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(cents_label, LV_ALIGN_CENTER, 0, 0);
     lv_obj_add_flag(cents_label, LV_OBJ_FLAG_HIDDEN);
 }
 
-void create_indicators(lv_disp_t *disp) {
-    lv_obj_t *scr = lv_disp_get_scr_act(disp);
+void create_indicators() {
+    lv_obj_t *scr = lv_scr_act();
     screen_width = lv_obj_get_width(scr);
     screen_height = lv_obj_get_height(scr);
 
@@ -317,86 +318,129 @@ static void continuous_adc_init(adc_channel_t *channel, uint8_t channel_num, adc
     *out_handle = handle;
 }
 
-static void display_init(lv_disp_t **out_handle) {
+// static void display_init(lv_disp_t **out_handle) {
 
-    // Configure I2C as master
-    i2c_master_bus_config_t i2c_mst_config = {
-        .i2c_port = 0,
-        .sda_io_num = SDA_OLED,
-        .scl_io_num = SCL_OLED,
-        .clk_source = I2C_CLK_SRC_DEFAULT,
-        .glitch_ignore_cnt = 7,
-        // .intr_priority = 1,
-        // .trans_queue_depth = 10,
-        .flags = {
-            .enable_internal_pullup = true // Internal pull-up resistor.
-        }
-    };
+//     // Configure I2C as master
+//     i2c_master_bus_config_t i2c_mst_config = {
+//         .i2c_port = 0,
+//         .sda_io_num = SDA_OLED,
+//         .scl_io_num = SCL_OLED,
+//         .clk_source = I2C_CLK_SRC_DEFAULT,
+//         .glitch_ignore_cnt = 7,
+//         // .intr_priority = 1,
+//         // .trans_queue_depth = 10,
+//         .flags = {
+//             .enable_internal_pullup = true // Internal pull-up resistor.
+//         }
+//     };
 
-    i2c_master_bus_handle_t bus_handle;
-    ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_mst_config, &bus_handle));
+//     i2c_master_bus_handle_t bus_handle;
+//     ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_mst_config, &bus_handle));
 
-    // Configure the OLED
-    esp_lcd_panel_io_handle_t io_handle = NULL;
-    esp_lcd_panel_io_i2c_config_t io_config = {
-        .dev_addr = 0x3c,
-        .control_phase_bytes = 1, // refer to LCD spec
-        .dc_bit_offset = 6,       // refer to LCD spec
-        .lcd_cmd_bits = LCD_CMD_BITS,
-        .lcd_param_bits = LCD_CMD_BITS,
-        .scl_speed_hz = LCD_PIXEL_CLOCK_HZ
-    };
-    ESP_ERROR_CHECK(esp_lcd_new_panel_io_i2c_v2(bus_handle, &io_config, &io_handle));
+//     // Configure the OLED
+//     esp_lcd_panel_io_handle_t io_handle = NULL;
+//     esp_lcd_panel_io_i2c_config_t io_config = {
+//         .dev_addr = 0x3c,
+//         .control_phase_bytes = 1, // refer to LCD spec
+//         .dc_bit_offset = 6,       // refer to LCD spec
+//         .lcd_cmd_bits = LCD_CMD_BITS,
+//         .lcd_param_bits = LCD_CMD_BITS,
+//         .scl_speed_hz = LCD_PIXEL_CLOCK_HZ
+//     };
+//     ESP_ERROR_CHECK(esp_lcd_new_panel_io_i2c_v2(bus_handle, &io_config, &io_handle));
 
-    esp_lcd_panel_dev_config_t panel_config = {
-        .reset_gpio_num = RST_OLED,
-        .bits_per_pixel = 1,
-    };
-    esp_lcd_panel_ssd1306_config_t ssd1306_config = {
-        .height = 64
-    };
-    panel_config.vendor_config = &ssd1306_config;
+//     esp_lcd_panel_dev_config_t panel_config = {
+//         .reset_gpio_num = RST_OLED,
+//         .bits_per_pixel = 1,
+//     };
+//     esp_lcd_panel_ssd1306_config_t ssd1306_config = {
+//         .height = 64
+//     };
+//     panel_config.vendor_config = &ssd1306_config;
 
-    esp_lcd_panel_handle_t panel_handle = NULL;
-    ESP_ERROR_CHECK(esp_lcd_new_panel_ssd1306(io_handle, &panel_config, &panel_handle));
+//     esp_lcd_panel_handle_t panel_handle = NULL;
+//     ESP_ERROR_CHECK(esp_lcd_new_panel_ssd1306(io_handle, &panel_config, &panel_handle));
 
-    ESP_ERROR_CHECK(esp_lcd_panel_reset(panel_handle));
-    ESP_ERROR_CHECK(esp_lcd_panel_init(panel_handle));
-    ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(panel_handle, true));
+//     ESP_ERROR_CHECK(esp_lcd_panel_reset(panel_handle));
+//     ESP_ERROR_CHECK(esp_lcd_panel_init(panel_handle));
+//     ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(panel_handle, true));
 
-    ESP_LOGI(TAG, "Initialize LVGL");
-    const lvgl_port_cfg_t lvgl_cfg = ESP_LVGL_PORT_INIT_CONFIG();
-    lvgl_port_init(&lvgl_cfg);
+//     ESP_LOGI(TAG, "Initialize LVGL");
+//     const lvgl_port_cfg_t lvgl_cfg = ESP_LVGL_PORT_INIT_CONFIG();
+//     lvgl_port_init(&lvgl_cfg);
 
-    const lvgl_port_display_cfg_t disp_cfg = {
-        .io_handle = io_handle,
-        .panel_handle = panel_handle,
-        .buffer_size = LCD_H_RES * LCD_V_RES,
-        .double_buffer = true,
-        .hres = LCD_H_RES,
-        .vres = LCD_V_RES,
-        .monochrome = true,
-        .rotation = {
-            .swap_xy = false,
-            .mirror_x = false,
-            .mirror_y = false,
-        },
-        .flags = {
-            .buff_dma = true,
-            .sw_rotate = false
-        }
-    };
+//     const lvgl_port_display_cfg_t disp_cfg = {
+//         .io_handle = io_handle,
+//         .panel_handle = panel_handle,
+//         .buffer_size = LCD_H_RES * LCD_V_RES,
+//         .double_buffer = true,
+//         .hres = LCD_H_RES,
+//         .vres = LCD_V_RES,
+//         .monochrome = true,
+//         .rotation = {
+//             .swap_xy = false,
+//             .mirror_x = false,
+//             .mirror_y = false,
+//         },
+//         .flags = {
+//             .buff_dma = true,
+//             .sw_rotate = false
+//         }
+//     };
 
-    lv_disp_t *disp = lvgl_port_add_disp(&disp_cfg);
+//     lv_disp_t *disp = lvgl_port_add_disp(&disp_cfg);
 
-    // Rotate the screen so it will work inside of the 125B enclosure (portrait mode with the USB input pointing up)
-    lv_disp_set_rotation(disp, LV_DISP_ROT_270);
+//     // Rotate the screen so it will work inside of the 125B enclosure (portrait mode with the USB input pointing up)
+//     lv_disp_set_rotation(disp, LV_DISP_ROT_270);
 
-    create_labels(disp);
-    create_indicators(disp);
+//     create_labels(disp);
+//     create_indicators(disp);
     
-    *out_handle = disp;
+//     *out_handle = disp;
+// }
+
+static esp_err_t app_lvgl_main()
+{
+    lvgl_port_lock(0);
+
+    create_labels();
+    create_indicators();
+
+    // lv_obj_t *label = lv_label_create(scr);
+    // lv_label_set_text(label, "Hello LVGL 9 and esp_lvgl_port!");
+    // lv_obj_set_style_text_color(label, lv_color_white(), LV_STATE_DEFAULT);
+    // lv_obj_align(label, LV_ALIGN_BOTTOM_MID, 0, -48);
+
+    // lv_obj_t *labelR = lv_label_create(scr);
+    // lv_label_set_text(labelR, "Red");
+    // lv_obj_set_style_text_color(labelR, lv_color_make(0xff, 0, 0), LV_STATE_DEFAULT);
+    // lv_obj_align(labelR, LV_ALIGN_TOP_MID, 0, 0);
+
+    // lv_obj_t *labelG = lv_label_create(scr);
+    // lv_label_set_text(labelG, "Green");
+    // lv_obj_set_style_text_color(labelG, lv_color_make(0, 0xff, 0), LV_STATE_DEFAULT);
+    // lv_obj_align(labelG, LV_ALIGN_TOP_MID, 0, 32);
+
+    // lv_obj_t *labelB = lv_label_create(scr);
+    // lv_label_set_text(labelB, "Blue");
+    // lv_obj_set_style_text_color(labelB, lv_color_make(0, 0, 0xff), LV_STATE_DEFAULT);
+    // lv_obj_align(labelB, LV_ALIGN_TOP_MID, 0, 64);
+
+    // lv_obj_t *btn_counter = lv_button_create(scr);
+    // lv_obj_align(btn_counter, LV_ALIGN_CENTER, 0, 0);
+    // lv_obj_set_size(btn_counter, 120, 50);
+    // lv_obj_add_event_cb(btn_counter, ui_event_Screen, LV_EVENT_ALL, btn_counter);
+
+    // lbl_counter = lv_label_create(btn_counter);
+    // lv_label_set_text(lbl_counter, "testing");
+    // lv_obj_set_style_text_color(lbl_counter, lv_color_make(248, 11, 181), LV_STATE_DEFAULT);
+    // lv_obj_align(lbl_counter, LV_ALIGN_CENTER, 0, 0);
+
+    lvgl_port_unlock();
+
+    return ESP_OK;
 }
+
 
 extern "C" void app_main() {
     // Start the Display Task
@@ -411,24 +455,49 @@ extern "C" void app_main() {
     );
 
     // Start the Pitch Reading & Detection Task
-    xTaskCreatePinnedToCore(
-        readAndDetectTask,  // callback function
-        "detect",           // debug name of the task
-        4096,               // stack depth (no idea what this should be)
-        NULL,               // params to pass to the callback function
-        10,                 // ux priority - higher value is higher priority
-        NULL,               // handle to the created task - we don't need it
-        1                   // Core ID
-    );
+    // xTaskCreatePinnedToCore(
+    //     readAndDetectTask,  // callback function
+    //     "detect",           // debug name of the task
+    //     4096,               // stack depth (no idea what this should be)
+    //     NULL,               // params to pass to the callback function
+    //     10,                 // ux priority - higher value is higher priority
+    //     NULL,               // handle to the created task - we don't need it
+    //     1                   // Core ID
+    // );
 }
 
 static void oledTask(void *pvParameter) {
     // Prep the OLED
-    lv_disp_t *disp = NULL;
-    display_init(&disp);
+    // lv_disp_t *disp = NULL;
+    // display_init(&disp);
+    esp_lcd_panel_io_handle_t lcd_io;
+    esp_lcd_panel_handle_t lcd_panel;
+    esp_lcd_touch_handle_t tp;
+    lvgl_port_touch_cfg_t touch_cfg;
+    lv_display_t *lvgl_display = NULL;
+    char buf[16];
+    uint16_t n = 0;
+
+    ESP_ERROR_CHECK(lcd_display_brightness_init());
+
+    ESP_ERROR_CHECK(app_lcd_init(&lcd_io, &lcd_panel));
+    lvgl_display = app_lvgl_init(lcd_io, lcd_panel);
+    if (lvgl_display == NULL)
+    {
+        ESP_LOGI(TAG, "fatal error in app_lvgl_init");
+        esp_restart();
+    }
+
+    ESP_ERROR_CHECK(touch_init(&tp));
+    touch_cfg.disp = lvgl_display;
+    touch_cfg.handle = tp;
+    lvgl_port_add_touch(&touch_cfg);
+
+    ESP_ERROR_CHECK(lcd_display_brightness_set(75));
+    ESP_ERROR_CHECK(lcd_display_rotate(lvgl_display, LV_DISPLAY_ROTATION_90));
+    ESP_ERROR_CHECK(app_lvgl_main());
 
     while(1) {
-        vTaskDelay(pdMS_TO_TICKS(1)); // ~33 times per second
         lv_task_handler();
 
         // Lock the mutex due to the LVGL APIs are not thread-safe
@@ -445,8 +514,12 @@ static void oledTask(void *pvParameter) {
             }
             // Release the mutex
             lvgl_port_unlock();
-        }    
+        }
+
+        // vTaskDelay(pdMS_TO_TICKS(1)); // ~33 times per second
+        vTaskDelay(125 / portTICK_PERIOD_MS); // ?? copied from the ESP32-Cheap-Yellow-Display project
     }
+    vTaskDelay(portMAX_DELAY);
 }
 
 static void readAndDetectTask(void *pvParameter) {
