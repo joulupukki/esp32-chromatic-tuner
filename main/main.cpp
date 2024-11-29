@@ -59,9 +59,9 @@ using std::fixed;
 #define TUNER_ADC_GET_DATA(p_data)        ((p_data)->type2.data)
 #endif
 
-#define TUNER_ADC_BUFFER_POOL_SIZE      1024
-#define TUNER_ADC_FRAME_SIZE            256
-#define TUNER_ADC_SAMPLE_RATE           20000
+#define TUNER_ADC_BUFFER_POOL_SIZE      2048
+#define TUNER_ADC_FRAME_SIZE            512
+#define TUNER_ADC_SAMPLE_RATE           20 * 1000 // 20kHz
 
 // If the difference between the minimum and maximum input values
 // is less than this value, discard the reading and do not evaluate
@@ -99,7 +99,7 @@ using namespace cycfi::q::pitch_names;
 using frequency = cycfi::q::frequency;
 using pitch = cycfi::q::pitch;
 CONSTEXPR frequency low_fs = cycfi::q::pitch_names::C[1];
-CONSTEXPR frequency high_fs = cycfi::q::pitch_names::C[9];
+CONSTEXPR frequency high_fs = cycfi::q::pitch_names::C[5];
 
 static adc_channel_t channel[1] = {ADC_CHANNEL_7};
 
@@ -269,7 +269,7 @@ void display_pitch(char *pitch, int cents) {
     }
 }
 
-static void continuous_adc_init(adc_channel_t *channel, uint8_t channel_num, adc_continuous_handle_t *out_handle)
+static void continuous_adc_init(adc_channel_t *channel, uint8_t channel_count, adc_continuous_handle_t *out_handle)
 {
     adc_continuous_handle_t handle = NULL;
 
@@ -289,8 +289,8 @@ static void continuous_adc_init(adc_channel_t *channel, uint8_t channel_num, adc
     };
 
     adc_digi_pattern_config_t adc_pattern[SOC_ADC_PATT_LEN_MAX] = {0};
-    dig_cfg.pattern_num = channel_num;
-    for (int i = 0; i < channel_num; i++) {
+    dig_cfg.pattern_num = channel_count;
+    for (int i = 0; i < channel_count; i++) {
         adc_pattern[i].atten = TUNER_ADC_ATTEN;
         adc_pattern[i].channel = channel[i] & 0x7;
         adc_pattern[i].unit = TUNER_ADC_UNIT;
