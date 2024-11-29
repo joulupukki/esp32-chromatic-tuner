@@ -6,6 +6,7 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "esp_adc/adc_continuous.h"
+#include "esp_timer.h"
 
 #include "exponential_smoother.hpp"
 #include "OneEuroFilter.h"
@@ -76,7 +77,7 @@ using std::fixed;
 //
 
 // 1EU Filter
-#define EU_FILTER_ESTIMATED_FREQ        0 // I believe this means no guess as to what the incoming frequency will initially be
+#define EU_FILTER_ESTIMATED_FREQ        48000 // Same as https://github.com/bkshepherd/DaisySeedProjects/blob/main/Software/GuitarPedal/Util/frequency_detector_q.h
 #define EU_FILTER_MIN_CUTOFF            0.5
 // #define EU_FILTER_BETA                  0.007
 #define EU_FILTER_BETA                  0.05 // Same as https://github.com/bkshepherd/DaisySeedProjects/blob/main/Software/GuitarPedal/Util/frequency_detector_q.h
@@ -677,7 +678,11 @@ static void readAndDetectTask(void *pvParameter) {
                     f = smoother.smooth(f);
 
                     // 1EU Filtering
-                    current_frequency = (float)oneEUFilter.filter((double)f); // Stores the current frequency in the global current_frequency variable
+                    int64_t time_us = esp_timer_get_time(); // Get time in microseconds
+                    int64_t time_seconds = time_us / 1000000;    // Convert to seconds
+                    current_frequency = (float)oneEUFilter.filter((double)f, (TimeStamp)time_seconds); // Stores the current frequency in the global current_frequency variable
+
+                    current_frequency = f;
 
                     // current_frequency = f;
                     // ESP_LOGI("QLib", "Frequency: %f", f);
