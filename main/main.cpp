@@ -258,13 +258,13 @@ void display_frequency(float frequency) {
 }
 
 const char *lastDisplayedNote = no_freq_name;
-char noteNameBuffer[8];
+char noteNameBuffer[4];
 
 void display_pitch(const char *noteName, float cents) {
     if (noteName != NULL) {
         // Show a noteName with indicators
         if (lastDisplayedNote != noteName) {
-            sprintf(noteNameBuffer, "%s", noteName);
+            snprintf(noteNameBuffer, 4, "%s", noteName);
             lv_label_set_text_static(frequency_label, noteNameBuffer); // need to use because of ADC (being changed so frequently)
             lastDisplayedNote = noteName; // prevent setting this so often to help prevent an LVGL crash
         }
@@ -296,7 +296,7 @@ void display_pitch(const char *noteName, float cents) {
     } else {
         // Hide the pitch and indicators since it's not detected
         if (lastDisplayedNote != no_freq_name) {
-            sprintf(noteNameBuffer, "%s", no_freq_name);
+            snprintf(noteNameBuffer, 4, "%s", no_freq_name);
             lv_label_set_text_static(frequency_label, noteNameBuffer);
             lastDisplayedNote = no_freq_name;
         }
