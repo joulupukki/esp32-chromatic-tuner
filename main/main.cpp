@@ -6,6 +6,7 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "esp_adc/adc_continuous.h"
+// #include "hal/adc_ll.h"
 #include "esp_timer.h"
 
 #include "exponential_smoother.hpp"
@@ -60,17 +61,27 @@ using std::fixed;
 #define TUNER_ADC_GET_DATA(p_data)        ((p_data)->type2.data)
 #endif
 
-#define TUNER_ADC_BUFFER_POOL_SIZE      2048
-#define TUNER_ADC_FRAME_SIZE            512
-#define TUNER_ADC_SAMPLE_RATE           20 * 1000 // 20kHz
+// CYD @ 48kHz
+#define TUNER_ADC_FRAME_SIZE            1024
+#define TUNER_ADC_BUFFER_POOL_SIZE      4096
+#define TUNER_ADC_SAMPLE_RATE           (48 * 1000) // 48kHz
+
+// HELTEC @ 20kHz
+// #define TUNER_ADC_FRAME_SIZE            (SOC_ADC_DIGI_DATA_BYTES_PER_CONV * 256)
+// #define TUNER_ADC_BUFFER_POOL_SIZE      (TUNER_ADC_FRAME_SIZE * 16)
+// #define TUNER_ADC_SAMPLE_RATE           (20 * 1000) // 20kHz
+
+// Original HELTEC
+// #define TUNER_ADC_FRAME_SIZE            (SOC_ADC_DIGI_DATA_BYTES_PER_CONV * 64)
+// #define TUNER_ADC_BUFFER_POOL_SIZE      (TUNER_ADC_FRAME_SIZE * 4)
+// #define TUNER_ADC_SAMPLE_RATE           (5 * 1000) // 5kHz
 
 // If the difference between the minimum and maximum input values
 // is less than this value, discard the reading and do not evaluate
 // the frequency. This should help cut down on the noise from the
 // OLED and only attempt to read frequency information when an
 // actual input signal is being read.
-// #define TUNER_READING_DIFF_MINIMUM      100
-#define TUNER_READING_DIFF_MINIMUM      50
+#define TUNER_READING_DIFF_MINIMUM      200
 
 //
 // Smoothing
@@ -96,13 +107,16 @@ using std::fixed;
 #define IN_TUNE_CENTS_WIDTH             4 // num of cents around the 0 point considered as "in tune"
 #define PITCH_INDICATOR_BAR_WIDTH       8
 
+#define MAX_PITCH_NAME_LENGTH           8
+
 using namespace cycfi::q::pitch_names;
 using frequency = cycfi::q::frequency;
 using pitch = cycfi::q::pitch;
 CONSTEXPR frequency low_fs = cycfi::q::pitch_names::C[1];
 CONSTEXPR frequency high_fs = cycfi::q::pitch_names::C[5];
 
-static adc_channel_t channel[1] = {ADC_CHANNEL_7};
+static adc_channel_t channel[1] = {ADC_CHANNEL_7}; // ESP32-CYD
+// static adc_channel_t channel[1] = {ADC_CHANNEL_4}; // ESP32 - Heltec
 
 static TaskHandle_t s_task_handle;
 static const char *TAG = "TUNER";
@@ -119,6 +133,7 @@ static const double dcutoff = EU_FILTER_DERIVATIVE_CUTOFF;
 OneEuroFilter oneEUFilter(euFilterFreq, mincutoff, beta, dcutoff) ;
 
 lv_obj_t *frequency_label;
+lv_style_t frequency_label_style;
 lv_obj_t *cents_label;
 lv_style_t cents_label_style;
 
@@ -130,31 +145,38 @@ lv_coord_t screen_height = 0;
 static void oledTask(void *pvParameter);
 static void readAndDetectTask(void *pvParameter);
 
+static const char *note_names[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+
 // Function to calculate the MIDI note number from frequency
-double midi_note_from_frequency(double freq) {
+float midi_note_from_frequency(float freq) {
     return 69 + 12 * log2(freq / A4_FREQ);
 }
 
 // Function to get pitch name and cents from MIDI note number
-void get_pitch_name_and_cents_from_frequency(float freq, char *pitch_name, int *cents) {
-    double midi_note = midi_note_from_frequency(freq);
+const char * get_pitch_name_and_cents_from_frequency(float freq, float *cents) {
+    float midi_note = midi_note_from_frequency(freq);
     int note_index = (int)fmod(midi_note, 12);
-    double fractional_note = midi_note - (int)midi_note;
+    float fractional_note = midi_note - (int)midi_note;
 
-    static const char *note_names[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
 
-    *cents = (int)(fractional_note * CENTS_PER_SEMITONE);
+    *cents = (fractional_note * CENTS_PER_SEMITONE);
     if (*cents >= CENTS_PER_SEMITONE / 2) {
         // Adjust the note index so that it still shows the proper note
         note_index++;
         if (note_index >= 12) {
             note_index = 0; // Overflow to the beginning of the note names
         }
-        *cents = *cents - CENTS_PER_SEMITONE;
+        // *cents = *cents - CENTS_PER_SEMITONE;
+        *cents -= CENTS_PER_SEMITONE; // Adjust to valid range
     }
 
-    strncpy(pitch_name, note_names[note_index], strlen(note_names[note_index]));
-    pitch_name[strlen(note_names[note_index])] = '\0';
+    // strncpy(pitch_name, note_names[note_index], strlen(note_names[note_index]));
+    if (note_index > 12) { // safeguard to prevent crash of snprintf()
+        note_index = 0;
+    }
+    // snprintf(pitch_name, MAX_PITCH_NAME_LENGTH, "%s", note_names[note_index]);
+    // pitch_name[strlen(note_names[note_index])] = '\0';
+    return note_names[note_index];
 }
 
 static bool IRAM_ATTR s_conv_done_cb(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *edata, void *user_data)
@@ -177,6 +199,10 @@ void create_labels() {
     lv_obj_set_width(frequency_label, lv_obj_get_width(scr));
     lv_obj_set_style_text_align(frequency_label, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(frequency_label, LV_ALIGN_BOTTOM_MID, 0, 0);
+
+    lv_style_init(&frequency_label_style);
+    lv_style_set_text_font(&frequency_label_style, &lv_font_montserrat_48);
+    lv_obj_add_style(frequency_label, &frequency_label_style, 0);
 
     // Cents Label (shown right under the pitch indicator bar)
     cents_label = lv_label_create(scr);
@@ -230,15 +256,15 @@ void display_frequency(float frequency) {
     lv_label_set_text_fmt(frequency_label, "Freq: %f", frequency);
 }
 
-void display_pitch(char *pitch, int cents) {
-    if (strlen(pitch) > 0) {
+void display_pitch(const char *pitch, float cents) {
+    if (pitch != NULL) {
         // Show a pitch with indicators
-        lv_label_set_text_fmt(frequency_label, "%s", pitch);
+        lv_label_set_text_static(frequency_label, pitch); // need to use because of ADC (being changed so frequently)
 
         // Calculate where the indicator bar should be left-to right based on the cents
         lv_coord_t indicator_x_pos = (lv_coord_t)0.0;
-        auto cents_per_side = CENTS_PER_SEMITONE / 2;
-        lv_coord_t half_width = screen_width / 2;
+        // auto cents_per_side = CENTS_PER_SEMITONE / 2;
+        // lv_coord_t half_width = screen_width / 2;
         if (abs(cents) <= IN_TUNE_CENTS_WIDTH / 2) {
             // Show this as perfectly in tune
             indicator_x_pos = 0;
@@ -256,7 +282,7 @@ void display_pitch(char *pitch, int cents) {
         lv_obj_clear_flag(pitch_indicator_bar, LV_OBJ_FLAG_HIDDEN);
         lv_obj_clear_flag(pitch_target_bar_top, LV_OBJ_FLAG_HIDDEN);
 
-        lv_label_set_text_fmt(cents_label, "%d", cents);
+        lv_label_set_text_fmt(cents_label, "%.1f", cents);
         lv_obj_align(cents_label, LV_ALIGN_CENTER, indicator_x_pos, 4);
         lv_obj_clear_flag(cents_label, LV_OBJ_FLAG_HIDDEN);
     } else {
@@ -278,19 +304,13 @@ static void continuous_adc_init(adc_channel_t *channel, uint8_t channel_count, a
         .max_store_buf_size = TUNER_ADC_BUFFER_POOL_SIZE,
         .conv_frame_size = TUNER_ADC_FRAME_SIZE,
         .flags = {
-            .flush_pool = false,
+            // .flush_pool = false,
+            .flush_pool = true,
         },
     };
     ESP_ERROR_CHECK(adc_continuous_new_handle(&adc_config, &handle));
 
-    adc_continuous_config_t dig_cfg = {
-        .sample_freq_hz = TUNER_ADC_SAMPLE_RATE,
-        .conv_mode = TUNER_ADC_CONV_MODE,
-        .format = TUNER_ADC_OUTPUT_TYPE,
-    };
-
     adc_digi_pattern_config_t adc_pattern[SOC_ADC_PATT_LEN_MAX] = {0};
-    dig_cfg.pattern_num = channel_count;
     for (int i = 0; i < channel_count; i++) {
         adc_pattern[i].atten = TUNER_ADC_ATTEN;
         adc_pattern[i].channel = channel[i] & 0x7;
@@ -301,7 +321,16 @@ static void continuous_adc_init(adc_channel_t *channel, uint8_t channel_count, a
         ESP_LOGI(TAG, "adc_pattern[%d].channel is :%" PRIx8, i, adc_pattern[i].channel);
         ESP_LOGI(TAG, "adc_pattern[%d].unit is :%" PRIx8, i, adc_pattern[i].unit);
     }
-    dig_cfg.adc_pattern = adc_pattern;
+
+    adc_continuous_config_t dig_cfg = {
+        .pattern_num = channel_count,
+        .adc_pattern = adc_pattern,
+        .sample_freq_hz = TUNER_ADC_SAMPLE_RATE,
+        .conv_mode = TUNER_ADC_CONV_MODE,
+        .format = TUNER_ADC_OUTPUT_TYPE,
+    };
+
+    // dig_cfg.adc_pattern = adc_pattern;
     ESP_ERROR_CHECK(adc_continuous_config(handle, &dig_cfg));
 
     *out_handle = handle;
@@ -464,8 +493,6 @@ static void oledTask(void *pvParameter) {
     esp_lcd_touch_handle_t tp;
     lvgl_port_touch_cfg_t touch_cfg;
     lv_display_t *lvgl_display = NULL;
-    char buf[16];
-    uint16_t n = 0;
 
     ESP_ERROR_CHECK(lcd_display_brightness_init());
 
@@ -486,6 +513,8 @@ static void oledTask(void *pvParameter) {
     ESP_ERROR_CHECK(lcd_display_rotate(lvgl_display, LV_DISPLAY_ROTATION_90));
     ESP_ERROR_CHECK(app_lvgl_main());
 
+    float cents;
+
     while(1) {
         lv_task_handler();
 
@@ -493,20 +522,19 @@ static void oledTask(void *pvParameter) {
         if (lvgl_port_lock(0)) {
             // display_frequency(current_frequency);
             if (current_frequency > 0) {
-                char noteName[8];
-                int cents;
-                get_pitch_name_and_cents_from_frequency(current_frequency, noteName, &cents);
+                const char *noteName = get_pitch_name_and_cents_from_frequency(current_frequency, &cents);
                 // ESP_LOGI(TAG, "%s - %d", noteName, cents);
                 display_pitch(noteName, cents);
+                // display_frequency(current_frequency);
             } else {
-                display_pitch("", 0);
+                display_pitch(NULL, 0);
             }
             // Release the mutex
             lvgl_port_unlock();
         }
 
-        vTaskDelay(pdMS_TO_TICKS(1)); // ~33 times per second
-        // vTaskDelay(125 / portTICK_PERIOD_MS); // ?? copied from the ESP32-Cheap-Yellow-Display project
+        // vTaskDelay(pdMS_TO_TICKS(1)); // ~33 times per second
+        vTaskDelay(pdMS_TO_TICKS(100)); // Yields to reset watchdog
     }
     vTaskDelay(portMAX_DELAY);
 }
@@ -524,6 +552,14 @@ static void readAndDetectTask(void *pvParameter) {
 
     // Get the pitch detector ready
     q::pitch_detector   pd(low_fs, high_fs, TUNER_ADC_SAMPLE_RATE, -40_dB);
+
+    // Use `lastFrequencyRecordedTime` to know elapsed time since
+    // the frequency was updated for the UI to read. Don't update
+    // more frequently than `minIntervalForFrequencyUpdate`.
+    int64_t lastFrequencyRecordedTime = esp_timer_get_time();
+
+    // Don't update the UI more frequently than this interval
+    int64_t minIntervalForFrequencyUpdate = 50 * 1000; // 50ms
 
     // auto const&                 bits = pd.bits();
     // auto const&                 edges = pd.edges();
@@ -557,6 +593,8 @@ static void readAndDetectTask(void *pvParameter) {
     ESP_ERROR_CHECK(adc_continuous_register_event_callbacks(handle, &cbs, NULL));
     ESP_ERROR_CHECK(adc_continuous_start(handle));
 
+    // adc_ll_digi_set_convert_limit_num(2); // potential hack for the ESP32 ADC bug
+
     while (1) {
         /**
          * This is to show you the way to use the ADC continuous mode driver event callback.
@@ -579,6 +617,7 @@ static void readAndDetectTask(void *pvParameter) {
                 int valuesStored = 0;
                 float maxVal = 0;
                 float minVal = MAXFLOAT;
+                // ESP_LOGI(TAG, "Bytes read: %ld", num_of_bytes_read);
                 for (int i = 0; i < num_of_bytes_read; i += SOC_ADC_DIGI_RESULT_BYTES, valuesStored++) {
                     adc_digi_output_data_t *p = (adc_digi_output_data_t*)&adc_buffer[i];
                     // if (i == 20) {
@@ -598,17 +637,19 @@ static void readAndDetectTask(void *pvParameter) {
                 }
 
                 // Bail out if the input does not meet the minimum criteria
-                auto peakToPeakValue = maxVal - minVal;
-                if (peakToPeakValue < TUNER_READING_DIFF_MINIMUM) {
+                float range = maxVal - minVal;
+                if (range < TUNER_READING_DIFF_MINIMUM) {
                     current_frequency = -1; // Indicate to the UI that there's no frequency available
                     oneEUFilter.reset(); // Reset the 1EU filter so the next frequency it detects will be as fast as possible
                     smoother.reset();
                     pd.reset();
+                    vTaskDelay(10 / portTICK_PERIOD_MS); // Should be 10ms?
                     continue;
                 }
 
+                // ESP_LOGI(TAG, "Min: %f, Max: %f, peak-to-peak: %f", minVal, maxVal, range);
+
                 // Normalize the values between -1.0 and +1.0 before processing with qlib.
-                float range = maxVal - minVal;
                 float midVal = range / 2;
                 // ESP_LOGI("min, max, range, mid:", "%f, %f, %f, %f", minVal, maxVal, range, midVal);
                 for (auto i = 0; i < valuesStored; i++) {
@@ -617,11 +658,6 @@ static void readAndDetectTask(void *pvParameter) {
                     float normalizedValue = newPosition / midVal;
                     // ESP_LOGI("norm-val", "%f is now %f", in[i], normalizedValue);
                     in[i] = normalizedValue;
-                }
-
-                bool calculatedAFrequency = false;
-                for (auto i = 0; i < valuesStored; ++i) {
-                    float time = i / float(TUNER_ADC_SAMPLE_RATE);
 
                     auto s = in[i]; // input signal
 
@@ -630,7 +666,7 @@ static void readAndDetectTask(void *pvParameter) {
                     // NOT work. They probably just need to be tweaked a little.
 
                     // Signal Conditioner
-                    s = sig_cond(s);
+                    // s = sig_cond(s);
 
                     // // Bandpass filter
                     // s = lp(s);
@@ -650,43 +686,33 @@ static void readAndDetectTask(void *pvParameter) {
                     //     threshold = onset_threshold;
                     // }
 
-                    // out[ch1] = s;
-
-                    // if (time >= break_time) {
-                    //     break_debug()
-                    // }
+                    int64_t time_us = esp_timer_get_time(); // Get time in microseconds
+                    int64_t time_ms = time_us / 1000; // Convert to milliseconds
+                    int64_t time_seconds = time_us / 1000000;    // Convert to seconds
+                    // int64_t elapsedTimeSinceLastUpdate = time_us - lastFrequencyRecordedTime;
 
                     // Pitch Detect
                     // Send in each value into the pitch detector
-                    bool ready = pd(s);
+                    // if (pd(s) == true && elapsedTimeSinceLastUpdate >= minIntervalForFrequencyUpdate) { // calculated a frequency
+                    if (pd(s) == true) { // calculated a frequency
+                        auto rawF = pd.get_frequency();
 
-                    calculatedAFrequency = ready;
-                    // // Print the predicted frequency
-                    // {
-                    //     auto f = pd.predict_frequency() / as_double(high_fs);
-                    //     out[ch5] = f;
-                    //     ESP_LOGI("QLib", "Predicted Frequency: %f", f);
-                    // }
+                        // Simple Expoential Smoothing
+                        auto expF = smoother.smooth(rawF);
 
-                }
+                        // 1EU Filtering
+                        auto oneEuF = (float)oneEUFilter.filter((double)expF, (TimeStamp)time_seconds); // Stores the current frequency in the global current_frequency variable
+                        // current_frequency = oneEuF / (11/9); // approx 1.2222
+                        // current_frequency = oneEuF / (1/.8181); // approx 1.2222
+                        // auto fixFactor = 1/.81818181;
+                        auto fixFactor = 1.2222222223;
+                        current_frequency = oneEuF / fixFactor; // approx 1.2222
+                        // current_frequency = oneEuF;
 
-                if (calculatedAFrequency) {
-                    auto f = pd.get_frequency();
+                        // lastFrequencyRecordedTime = time_us;
 
-                    // Simple Expoential Smoothing
-                    // current_frequency = smoother.smooth(f);
-                    f = smoother.smooth(f);
-
-                    // 1EU Filtering
-                    int64_t time_us = esp_timer_get_time(); // Get time in microseconds
-                    int64_t time_seconds = time_us / 1000000;    // Convert to seconds
-                    current_frequency = (float)oneEUFilter.filter((double)f, (TimeStamp)time_seconds); // Stores the current frequency in the global current_frequency variable
-
-                    current_frequency = f;
-
-                    // current_frequency = f;
-                    // ESP_LOGI("QLib", "Frequency: %f", f);
-                    // ESP_LOGI("QLib", "%f - %f", f, current_frequency);
+                        // ESP_LOGI("QLib", "Range: %d, Raw: %f, ExpF: %f, 1EU: %f, corrected: %f", (int)range, rawF, expF, oneEuF, current_frequency);
+                    }
                 }
 
                 /**
@@ -695,6 +721,7 @@ static void readAndDetectTask(void *pvParameter) {
                  * usually you don't need this delay (as this task will block for a while).
                  */
                 // vTaskDelay(1); // potentially no longer needed
+                vTaskDelay(10 / portTICK_PERIOD_MS); // Should be 10ms?
             } else if (ret == ESP_ERR_TIMEOUT) {
                 //We try to read `EXAMPLE_READ_LEN` until API returns timeout, which means there's no available data
                 break;

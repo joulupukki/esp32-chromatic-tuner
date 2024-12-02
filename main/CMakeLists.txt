@@ -1,5 +1,13 @@
+# ESP32 Heltec
+# idf_component_register(SRCS "OneEuroFilter.cpp" "main.cpp"
+#                     INCLUDE_DIRS "."
+#                     REQUIRES esp_lcd driver esp_adc
+#                     )
+
+# ESP32-CYD
 idf_component_register(SRCS "lcd.c" "touch.c" "OneEuroFilter.cpp" "main.cpp"
                     INCLUDE_DIRS "."
+#                    REQUIRES esp_lcd driver esp_adc hal
                     REQUIRES esp_lcd driver esp_adc
                     )
 

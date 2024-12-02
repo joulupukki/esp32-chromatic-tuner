@@ -9,6 +9,8 @@
     "files.associations": {
         "bitset": "cpp",
         "future": "cpp",
-        "optional": "cpp"
+        "optional": "cpp",
+        "__locale": "cpp",
+        "ios": "cpp"
     }
 }
