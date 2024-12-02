@@ -104,7 +104,8 @@ using std::fixed;
 #define CENTS_PER_SEMITONE              100
 
 #define INDICATOR_SEGMENTS              17 // num of visual segments
-#define IN_TUNE_CENTS_WIDTH             4 // num of cents around the 0 point considered as "in tune"
+// #define IN_TUNE_CENTS_WIDTH             4 // num of cents around the 0 point considered as "in tune"
+#define IN_TUNE_CENTS_WIDTH             2 // num of cents around the 0 point considered as "in tune"
 #define PITCH_INDICATOR_BAR_WIDTH       8
 
 #define MAX_PITCH_NAME_LENGTH           8
@@ -147,6 +148,8 @@ static void readAndDetectTask(void *pvParameter);
 
 static const char *note_names[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
 static const char *no_freq_name = "-";
+lv_anim_t pitch_animation;
+lv_coord_t last_pitch_indicator_pos = (lv_coord_t)0.0;
 
 // Function to calculate the MIDI note number from frequency
 float midi_note_from_frequency(float freq) {
@@ -224,32 +227,38 @@ void create_indicators() {
     screen_height = lv_obj_get_height(scr);
 
     //
+    // Create the target bar. This is the bar
+    // that stays put and indicates where tuning
+    // is centered.
+    lv_obj_t * rect = lv_obj_create(scr);
+    lv_obj_set_size(rect, 12, screen_height / 6);
+    lv_obj_align(rect, LV_ALIGN_TOP_MID, 0, 0);
+    lv_obj_set_style_bg_color(rect, lv_color_make(0x55, 0x55, 0x55), LV_PART_MAIN);
+    pitch_target_bar_top = rect;
+
+    //
     // Create the indicator bar. This is the bar
     // that moves around during tuning.
-    lv_obj_t * rect = lv_obj_create(scr);
+    rect = lv_obj_create(scr);
 
     // Set the rectangle's size and position
     lv_obj_set_size(rect, PITCH_INDICATOR_BAR_WIDTH, screen_height / 3);
     lv_obj_align(rect, LV_ALIGN_TOP_MID, 0, 0);
 
     // Set the rectangle's style (optional)
-    lv_obj_set_style_bg_color(rect, lv_color_black(), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(rect, lv_color_make(0xFF, 0x00, 0x00), LV_PART_MAIN);
 
     pitch_indicator_bar = rect;
-
-    //
-    // Create the target bar. This is the bar
-    // that stays put and indicates where tuning
-    // is centered.
-    rect = lv_obj_create(scr);
-    lv_obj_set_size(rect, 6, screen_height / 6);
-    lv_obj_align(rect, LV_ALIGN_TOP_MID, 0, 0);
-    lv_obj_set_style_bg_color(rect, lv_color_black(), LV_PART_MAIN);
-    pitch_target_bar_top = rect;
 
     // Hide these bars initially
     lv_obj_add_flag(pitch_indicator_bar, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(pitch_target_bar_top, LV_OBJ_FLAG_HIDDEN);
+
+    // Initialize the pitch animation
+    lv_anim_init(&pitch_animation);
+    lv_anim_set_exec_cb(&pitch_animation, (lv_anim_exec_xcb_t) lv_obj_set_x);
+    lv_anim_set_var(&pitch_animation, pitch_indicator_bar);
+    lv_anim_set_duration(&pitch_animation, 150);
 }
 
 // This function is for debug and will just show the frequency and nothing else
@@ -273,6 +282,7 @@ void display_pitch(const char *noteName, float cents) {
         lv_coord_t indicator_x_pos = (lv_coord_t)0.0;
         // auto cents_per_side = CENTS_PER_SEMITONE / 2;
         // lv_coord_t half_width = screen_width / 2;
+
         if (abs(cents) <= IN_TUNE_CENTS_WIDTH / 2) {
             // Show this as perfectly in tune
             indicator_x_pos = 0;
@@ -284,7 +294,9 @@ void display_pitch(const char *noteName, float cents) {
             indicator_x_pos = segment_index * segment_width_pixels; 
         }
 
-        lv_obj_align(pitch_indicator_bar, LV_ALIGN_TOP_MID, indicator_x_pos, 18);
+        // lv_obj_align(pitch_indicator_bar, LV_ALIGN_TOP_MID, indicator_x_pos, 18);
+        lv_anim_set_values(&pitch_animation, last_pitch_indicator_pos, indicator_x_pos);
+        last_pitch_indicator_pos = indicator_x_pos;
 
         // Make the two bars show up
         lv_obj_clear_flag(pitch_indicator_bar, LV_OBJ_FLAG_HIDDEN);
@@ -293,6 +305,8 @@ void display_pitch(const char *noteName, float cents) {
         lv_label_set_text_fmt(cents_label, "%.1f", cents);
         lv_obj_align(cents_label, LV_ALIGN_CENTER, indicator_x_pos, 4);
         lv_obj_clear_flag(cents_label, LV_OBJ_FLAG_HIDDEN);
+
+        lv_anim_start(&pitch_animation);
     } else {
         // Hide the pitch and indicators since it's not detected
         if (lastDisplayedNote != no_freq_name) {
