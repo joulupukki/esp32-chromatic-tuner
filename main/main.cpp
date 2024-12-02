@@ -146,6 +146,7 @@ static void oledTask(void *pvParameter);
 static void readAndDetectTask(void *pvParameter);
 
 static const char *note_names[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+static const char *no_freq_name = "-";
 
 // Function to calculate the MIDI note number from frequency
 float midi_note_from_frequency(float freq) {
@@ -195,7 +196,7 @@ void create_labels() {
     frequency_label = lv_label_create(scr);
     lv_label_set_long_mode(frequency_label, LV_LABEL_LONG_CLIP);
 
-    lv_label_set_text(frequency_label, "-");
+    lv_label_set_text_static(frequency_label, no_freq_name);
     lv_obj_set_width(frequency_label, lv_obj_get_width(scr));
     lv_obj_set_style_text_align(frequency_label, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(frequency_label, LV_ALIGN_BOTTOM_MID, 0, 0);
@@ -256,10 +257,17 @@ void display_frequency(float frequency) {
     lv_label_set_text_fmt(frequency_label, "Freq: %f", frequency);
 }
 
-void display_pitch(const char *pitch, float cents) {
-    if (pitch != NULL) {
-        // Show a pitch with indicators
-        lv_label_set_text_static(frequency_label, pitch); // need to use because of ADC (being changed so frequently)
+const char *lastDisplayedNote = no_freq_name;
+char noteNameBuffer[8];
+
+void display_pitch(const char *noteName, float cents) {
+    if (noteName != NULL) {
+        // Show a noteName with indicators
+        if (lastDisplayedNote != noteName) {
+            sprintf(noteNameBuffer, "%s", noteName);
+            lv_label_set_text_static(frequency_label, noteNameBuffer); // need to use because of ADC (being changed so frequently)
+            lastDisplayedNote = noteName; // prevent setting this so often to help prevent an LVGL crash
+        }
 
         // Calculate where the indicator bar should be left-to right based on the cents
         lv_coord_t indicator_x_pos = (lv_coord_t)0.0;
@@ -287,7 +295,11 @@ void display_pitch(const char *pitch, float cents) {
         lv_obj_clear_flag(cents_label, LV_OBJ_FLAG_HIDDEN);
     } else {
         // Hide the pitch and indicators since it's not detected
-        lv_label_set_text(frequency_label, "-");
+        if (lastDisplayedNote != no_freq_name) {
+            sprintf(noteNameBuffer, "%s", no_freq_name);
+            lv_label_set_text_static(frequency_label, noteNameBuffer);
+            lastDisplayedNote = no_freq_name;
+        }
 
         // Hide the indicator bars and cents label
         lv_obj_add_flag(pitch_indicator_bar, LV_OBJ_FLAG_HIDDEN);
