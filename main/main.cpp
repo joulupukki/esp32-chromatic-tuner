@@ -204,7 +204,7 @@ void create_labels(lv_obj_t * parent) {
 
     lv_label_set_text_static(note_name_label, no_freq_name);
     lv_obj_set_width(note_name_label, screen_width);
-    lv_obj_set_style_text_align(note_name_label, LV_TEXT_ALIGN_CENTER, 0); // shifted up from the bottom of the screen
+    lv_obj_set_style_text_align(note_name_label, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(note_name_label, LV_ALIGN_CENTER, 0, 0);
 
     lv_style_init(&note_name_label_style);    
@@ -212,7 +212,7 @@ void create_labels(lv_obj_t * parent) {
     lv_style_set_text_font(&note_name_label_style, &raleway_128);
     lv_obj_add_style(note_name_label, &note_name_label_style, 0);
 
-    lv_obj_align(note_name_label, LV_ALIGN_CENTER, 0, 50);
+    lv_obj_align(note_name_label, LV_ALIGN_CENTER, 0, 50); // Offset down by 50 pixels
 
     // Frequency Label (very bottom)
     frequency_label = lv_label_create(parent);
