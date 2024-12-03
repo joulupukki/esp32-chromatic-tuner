@@ -1,14 +1,16 @@
 {
-    "idf.adapterTargetName": "esp32s3",
+    "idf.adapterTargetName": "esp32",
     "idf.openOcdConfigs": [
         "interface/ftdi/esp32_devkitj_v1.cfg",
-        "target/esp32s3.cfg"
+        "target/esp32.cfg"
     ],
-    "idf.port": "/dev/tty.usbserial-0001",
+    "idf.port": "/dev/tty.usbserial-210",
     "idf.flashType": "UART",
     "files.associations": {
         "bitset": "cpp",
         "future": "cpp",
-        "optional": "cpp"
+        "optional": "cpp",
+        "__locale": "cpp",
+        "ios": "cpp"
     }
 }

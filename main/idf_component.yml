@@ -5,13 +5,16 @@
 ##############################################################################
 ## IDF Component Manager Manifest File
 dependencies:
-  lvgl/lvgl:
-    version: "^8"
-    public: true
-  espressif/esp_lvgl_port: "==2.2.2"
-  ## Required IDF version
+  espressif/esp_lcd_ili9341: "^2.0.0"
+  atanisoft/esp_lcd_touch_xpt2046: "^1.0.3"
+  espressif/esp_lvgl_port: "^2.0.0"
+  lvgl/lvgl: "^9.1.0"
+
   idf:
-    version: ">=4.1.0"
+    version: "^5.2.0"
+  ## Required IDF version
+#  idf:
+#    version: ">=4.1.0"
   # # Put list of dependencies here
   # # For components maintained by Espressif:
   # component: "~1.0.0"

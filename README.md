@@ -1,7 +1,7 @@
 ## Project Overview
-This is an in-progress project to build an open source DIY guitar pedal tuner using an ESP32 S3 Dev Board. The project uses Q DSP Library for frequency detection and uses LVGL for displaying the results on the built-in OLED.
+This is an in-progress project to build an open source DIY guitar pedal tuner using an ESP32 Dev Board. The project uses Q DSP Library for frequency detection and uses LVGL for displaying the results on the built-in OLED.
 
-Dev board is the Heltec WiFi Kit 32 (V3): https://heltec.org/project/wifi-kit32-v3/
+The ESP32 board is a ESP32-2432S028R (ESP32-WROOM-32: https://www.espressif.com/sites/default/files/documentation/esp32-wroom-32_datasheet_en.pdf), more commonly known as ESP32 CYD (Cheap Yellow Display). For more information, take a look at this GitHub repo: https://github.com/witnessmenow/ESP32-Cheap-Yellow-Display
 
 ## Setup
 
@@ -18,10 +18,10 @@ Dev board is the Heltec WiFi Kit 32 (V3): https://heltec.org/project/wifi-kit32-
     git submodule update --init --recursive
     ```
 7. Open the esp32-chromatic-tuner folder in VS Code
-8. Set your ESP32 target (esp32s3)
+8. Set your ESP32 target (esp32)
     - Open the Command Palette (Command+Shift+P on a Mac) and select `ESP-IDF: Set Espressif Device Target`
-    - Select `esp32s3`
-    - Select the `via ESP PROG` option
+    - Select `esp32`
+    - Select the `ESP32 chip (via ESP-PROG)` option
 9. Select the port to use
     - Plug in your ESP32 dev board and wait for a few seconds
     - Open the Command Palette (Command+Shift+P on a Mac) and select `ESP-IDF: Select Port to Use (COM, tty, usbserial)`
