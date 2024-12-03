@@ -106,9 +106,9 @@ using std::fixed;
 #define A4_FREQ                         440.0
 #define CENTS_PER_SEMITONE              100
 
-#define INDICATOR_SEGMENTS              17 // num of visual segments
+#define INDICATOR_SEGMENTS              100 // num of visual segments for showing tuning accuracy
 // #define IN_TUNE_CENTS_WIDTH             4 // num of cents around the 0 point considered as "in tune"
-#define IN_TUNE_CENTS_WIDTH             1 // num of cents around the 0 point considered as "in tune"
+#define IN_TUNE_CENTS_WIDTH             2 // num of cents around the 0 point considered as "in tune"
 #define PITCH_INDICATOR_BAR_WIDTH       8
 
 #define MAX_PITCH_NAME_LENGTH           8
