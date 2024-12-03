@@ -36,6 +36,9 @@ extern "C" { // because these files are C and not C++
     #include "touch.h"
 }
 
+extern "C" const lv_font_t raleway_128;
+
+
 namespace q = cycfi::q;
 using namespace q::literals;
 using std::fixed;
@@ -81,7 +84,7 @@ using std::fixed;
 // the frequency. This should help cut down on the noise from the
 // OLED and only attempt to read frequency information when an
 // actual input signal is being read.
-#define TUNER_READING_DIFF_MINIMUM      200
+#define TUNER_READING_DIFF_MINIMUM      400
 
 //
 // Smoothing
@@ -105,7 +108,7 @@ using std::fixed;
 
 #define INDICATOR_SEGMENTS              17 // num of visual segments
 // #define IN_TUNE_CENTS_WIDTH             4 // num of cents around the 0 point considered as "in tune"
-#define IN_TUNE_CENTS_WIDTH             2 // num of cents around the 0 point considered as "in tune"
+#define IN_TUNE_CENTS_WIDTH             1 // num of cents around the 0 point considered as "in tune"
 #define PITCH_INDICATOR_BAR_WIDTH       8
 
 #define MAX_PITCH_NAME_LENGTH           8
@@ -133,13 +136,15 @@ static const double dcutoff = EU_FILTER_DERIVATIVE_CUTOFF;
 
 OneEuroFilter oneEUFilter(euFilterFreq, mincutoff, beta, dcutoff) ;
 
+lv_obj_t *note_name_label;
+lv_style_t note_name_label_style;
+
 lv_obj_t *frequency_label;
 lv_style_t frequency_label_style;
 lv_obj_t *cents_label;
 lv_style_t cents_label_style;
 
 lv_obj_t *pitch_indicator_bar;
-lv_obj_t *pitch_target_bar_top;
 lv_coord_t screen_width = 0;
 lv_coord_t screen_height = 0;
 
@@ -192,67 +197,123 @@ static bool IRAM_ATTR s_conv_done_cb(adc_continuous_handle_t handle, const adc_c
     return (mustYield == pdTRUE);
 }
 
-void create_labels() {
-    lv_obj_t *scr = lv_scr_act();
+void create_labels(lv_obj_t * parent) {
+    // Note Name Label (the big font at the bottom middle)
+    note_name_label = lv_label_create(parent);
+    lv_label_set_long_mode(note_name_label, LV_LABEL_LONG_CLIP);
 
-    // Frequency Label (the big font at the bottom middle)
-    frequency_label = lv_label_create(scr);
+    lv_label_set_text_static(note_name_label, no_freq_name);
+    lv_obj_set_width(note_name_label, screen_width);
+    lv_obj_set_style_text_align(note_name_label, LV_TEXT_ALIGN_CENTER, 0); // shifted up from the bottom of the screen
+    lv_obj_align(note_name_label, LV_ALIGN_CENTER, 0, 0);
+
+    lv_style_init(&note_name_label_style);    
+    // lv_style_set_text_font(&note_name_label_style, &lv_font_montserrat_48);
+    lv_style_set_text_font(&note_name_label_style, &raleway_128);
+    lv_obj_add_style(note_name_label, &note_name_label_style, 0);
+
+    lv_obj_align(note_name_label, LV_ALIGN_CENTER, 0, 50);
+
+    // Frequency Label (very bottom)
+    frequency_label = lv_label_create(parent);
     lv_label_set_long_mode(frequency_label, LV_LABEL_LONG_CLIP);
 
     lv_label_set_text_static(frequency_label, no_freq_name);
-    lv_obj_set_width(frequency_label, lv_obj_get_width(scr));
-    lv_obj_set_style_text_align(frequency_label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_align(frequency_label, LV_ALIGN_BOTTOM_MID, 0, 0);
+    lv_obj_set_width(frequency_label, screen_width);
+    lv_obj_set_style_text_align(frequency_label, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_obj_align(frequency_label, LV_ALIGN_BOTTOM_RIGHT, 0, 0);
 
     lv_style_init(&frequency_label_style);
-    lv_style_set_text_font(&frequency_label_style, &lv_font_montserrat_48);
+    lv_style_set_text_font(&frequency_label_style, &lv_font_montserrat_14);
     lv_obj_add_style(frequency_label, &frequency_label_style, 0);
+}
+
+void create_ruler(lv_obj_t * parent) {
+    const int ruler_height = 50;     // Total height of the ruler
+    const int ruler_line_width = 2;  // Width of each ruler line
+    const int spacer_width = (screen_width - (29 * ruler_line_width)) / 30;      // Width between items
+    const int center_height = 40;    // Height of the center line
+    const int tall_height = 30;      // Height of taller side lines
+    const int short_height = 20;     // Height of shorter side lines
+    const int num_lines_side = 14;   // Number of lines on each side of the center
+
+    const int cents_container_height = ruler_height + 28;
 
     // Cents Label (shown right under the pitch indicator bar)
-    cents_label = lv_label_create(scr);
+    lv_obj_t * cents_container = lv_obj_create(parent);
+    lv_obj_set_scrollbar_mode(cents_container, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_set_style_border_width(cents_container, 0, LV_PART_MAIN);
+    lv_obj_set_size(cents_container, screen_width, cents_container_height);
+    lv_obj_set_style_bg_color(cents_container, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_opa(cents_container, LV_OPA_COVER, 0);
+    lv_obj_align(cents_container, LV_ALIGN_TOP_MID, 0, 0);
+
+    cents_label = lv_label_create(cents_container);
     
     lv_style_init(&cents_label_style);
     lv_style_set_text_font(&cents_label_style, &lv_font_montserrat_14);
     lv_obj_add_style(cents_label, &cents_label_style, 0);
 
-    lv_obj_set_width(cents_label, lv_obj_get_width(scr) / 2);
+    lv_obj_set_width(cents_label, screen_width / 2);
     lv_obj_set_style_text_align(cents_label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_align(cents_label, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_align(cents_label, LV_ALIGN_BOTTOM_MID, 0, 0);
     lv_obj_add_flag(cents_label, LV_OBJ_FLAG_HIDDEN);
-}
 
-void create_indicators() {
-    lv_obj_t *scr = lv_scr_act();
-    screen_width = lv_obj_get_width(scr);
-    screen_height = lv_obj_get_height(scr);
 
-    //
-    // Create the target bar. This is the bar
-    // that stays put and indicates where tuning
-    // is centered.
-    lv_obj_t * rect = lv_obj_create(scr);
-    lv_obj_set_size(rect, 12, screen_height / 6);
-    lv_obj_align(rect, LV_ALIGN_TOP_MID, 0, 0);
-    lv_obj_set_style_bg_color(rect, lv_color_make(0x55, 0x55, 0x55), LV_PART_MAIN);
-    pitch_target_bar_top = rect;
+    // Create a container for the ruler
+    lv_obj_t * ruler_container = lv_obj_create(parent);
+    lv_obj_set_scrollbar_mode(ruler_container, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_set_style_border_width(ruler_container, 0, LV_PART_MAIN);
+    lv_obj_set_size(ruler_container, screen_width, ruler_height);
+    lv_obj_set_style_bg_color(ruler_container, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_opa(ruler_container, LV_OPA_COVER, 0);
+    lv_obj_align(ruler_container, LV_ALIGN_TOP_MID, 0, 0);
+
+    // Center line
+    lv_obj_t * center_line = lv_obj_create(ruler_container);
+    lv_obj_set_size(center_line, ruler_line_width, center_height);
+    lv_obj_set_style_bg_color(center_line, lv_color_hex(0x777777), 0);
+    lv_obj_set_style_bg_opa(center_line, LV_OPA_COVER, 0);
+    lv_obj_align(center_line, LV_ALIGN_CENTER, 0, 0);
+
+    // Lines on the left and right sides
+    for (int i = 1; i <= num_lines_side; i++) {
+        // Calculate heights for alternating lines
+        int line_height = ((i % 2 == 0) ? tall_height : short_height) - i;
+        bool is_tall_height = i % 2;
+
+        // Left side line
+        lv_obj_t * left_line = lv_obj_create(ruler_container);
+        lv_obj_set_size(left_line, ruler_line_width, line_height);
+        lv_obj_set_style_bg_color(left_line, lv_color_hex(is_tall_height ? 0x777777 : 0x333333), 0);
+        lv_obj_set_style_bg_opa(left_line, LV_OPA_COVER, 0);
+        lv_obj_align(left_line, LV_ALIGN_CENTER, -(spacer_width + 2) * i, 0);
+
+        // Right side line
+        lv_obj_t * right_line = lv_obj_create(ruler_container);
+        lv_obj_set_size(right_line, ruler_line_width, line_height);
+        lv_obj_set_style_bg_color(right_line, lv_color_hex(is_tall_height ? 0x777777 : 0x333333), 0);
+        lv_obj_set_style_bg_opa(right_line, LV_OPA_COVER, 0);
+        lv_obj_align(right_line, LV_ALIGN_CENTER, (spacer_width + 2) * i, 0);
+    }
 
     //
     // Create the indicator bar. This is the bar
     // that moves around during tuning.
-    rect = lv_obj_create(scr);
+    lv_obj_t * rect = lv_obj_create(ruler_container);
 
     // Set the rectangle's size and position
-    lv_obj_set_size(rect, PITCH_INDICATOR_BAR_WIDTH, screen_height / 3);
-    lv_obj_align(rect, LV_ALIGN_TOP_MID, 0, 0);
+    lv_obj_set_size(rect, PITCH_INDICATOR_BAR_WIDTH, center_height);
+    lv_obj_set_style_border_width(rect, 0, LV_PART_MAIN);
+    lv_obj_align(rect, LV_ALIGN_CENTER, 0, 0);
 
     // Set the rectangle's style (optional)
-    lv_obj_set_style_bg_color(rect, lv_color_make(0xFF, 0x00, 0x00), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(rect, lv_color_hex(0xFF0000), LV_PART_MAIN);
 
     pitch_indicator_bar = rect;
 
     // Hide these bars initially
     lv_obj_add_flag(pitch_indicator_bar, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(pitch_target_bar_top, LV_OBJ_FLAG_HIDDEN);
 
     // Initialize the pitch animation
     lv_anim_init(&pitch_animation);
@@ -262,19 +323,19 @@ void create_indicators() {
 }
 
 // This function is for debug and will just show the frequency and nothing else
-void display_frequency(float frequency) {
-    lv_label_set_text_fmt(frequency_label, "Freq: %f", frequency);
-}
-
 const char *lastDisplayedNote = no_freq_name;
 char noteNameBuffer[4];
 
-void display_pitch(const char *noteName, float cents) {
+void display_pitch(float frequency, const char *noteName, float cents) {
     if (noteName != NULL) {
+        lv_label_set_text_fmt(frequency_label, "%.2f", frequency);
+        lv_obj_clear_flag(frequency_label, LV_OBJ_FLAG_HIDDEN);
+
         // Show a noteName with indicators
         if (lastDisplayedNote != noteName) {
             snprintf(noteNameBuffer, 4, "%s", noteName);
-            lv_label_set_text_static(frequency_label, noteNameBuffer); // need to use because of ADC (being changed so frequently)
+            lv_label_set_text_static(note_name_label, noteNameBuffer); // need to use because of ADC (being changed so frequently)
+            lv_obj_center(note_name_label);
             lastDisplayedNote = noteName; // prevent setting this so often to help prevent an LVGL crash
         }
 
@@ -300,10 +361,9 @@ void display_pitch(const char *noteName, float cents) {
 
         // Make the two bars show up
         lv_obj_clear_flag(pitch_indicator_bar, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_clear_flag(pitch_target_bar_top, LV_OBJ_FLAG_HIDDEN);
 
         lv_label_set_text_fmt(cents_label, "%.1f", cents);
-        lv_obj_align(cents_label, LV_ALIGN_CENTER, indicator_x_pos, 4);
+        // lv_obj_align(cents_label, LV_ALIGN_CENTER, indicator_x_pos, 4);
         lv_obj_clear_flag(cents_label, LV_OBJ_FLAG_HIDDEN);
 
         lv_anim_start(&pitch_animation);
@@ -311,14 +371,15 @@ void display_pitch(const char *noteName, float cents) {
         // Hide the pitch and indicators since it's not detected
         if (lastDisplayedNote != no_freq_name) {
             snprintf(noteNameBuffer, 4, "%s", no_freq_name);
-            lv_label_set_text_static(frequency_label, noteNameBuffer);
+            lv_label_set_text_static(note_name_label, noteNameBuffer);
+            // lv_obj_center(note_name_label);
             lastDisplayedNote = no_freq_name;
         }
 
         // Hide the indicator bars and cents label
         lv_obj_add_flag(pitch_indicator_bar, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_add_flag(pitch_target_bar_top, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(cents_label, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(frequency_label, LV_OBJ_FLAG_HIDDEN);
     }
 }
 
@@ -447,8 +508,13 @@ static esp_err_t app_lvgl_main()
 {
     lvgl_port_lock(0);
 
-    create_labels();
-    create_indicators();
+    lv_obj_t *scr = lv_scr_act();
+    screen_width = lv_obj_get_width(scr);
+    screen_height = lv_obj_get_height(scr);
+    lv_obj_set_style_bg_color(scr, lv_color_hex(0x000000), LV_PART_MAIN);
+    lv_obj_set_scrollbar_mode(scr, LV_SCROLLBAR_MODE_OFF);
+    create_ruler(scr);
+    create_labels(scr);
 
     // lv_obj_t *label = lv_label_create(scr);
     // lv_label_set_text(label, "Hello LVGL 9 and esp_lvgl_port!");
@@ -550,10 +616,9 @@ static void oledTask(void *pvParameter) {
             if (current_frequency > 0) {
                 const char *noteName = get_pitch_name_and_cents_from_frequency(current_frequency, &cents);
                 // ESP_LOGI(TAG, "%s - %d", noteName, cents);
-                display_pitch(noteName, cents);
-                // display_frequency(current_frequency);
+                display_pitch(current_frequency, noteName, cents);
             } else {
-                display_pitch(NULL, 0);
+                display_pitch(0, NULL, 0);
             }
             // Release the mutex
             lvgl_port_unlock();
