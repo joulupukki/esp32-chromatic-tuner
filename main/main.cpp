@@ -212,7 +212,7 @@ void create_labels(lv_obj_t * parent) {
     lv_style_set_text_font(&note_name_label_style, &raleway_128);
     lv_obj_add_style(note_name_label, &note_name_label_style, 0);
 
-    lv_obj_align(note_name_label, LV_ALIGN_CENTER, 0, 50); // Offset down by 50 pixels
+    lv_obj_align(note_name_label, LV_ALIGN_CENTER, 0, 20); // Offset down by 20 pixels
 
     // Frequency Label (very bottom)
     frequency_label = lv_label_create(parent);
@@ -335,7 +335,6 @@ void display_pitch(float frequency, const char *noteName, float cents) {
         if (lastDisplayedNote != noteName) {
             snprintf(noteNameBuffer, 4, "%s", noteName);
             lv_label_set_text_static(note_name_label, noteNameBuffer); // need to use because of ADC (being changed so frequently)
-            lv_obj_center(note_name_label);
             lastDisplayedNote = noteName; // prevent setting this so often to help prevent an LVGL crash
         }
 
