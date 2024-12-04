@@ -31,6 +31,9 @@
 #include "lvgl.h"
 #include "esp_lvgl_port.h"
 
+#include "nvs_flash.h"
+#include "nvs.h"
+
 extern "C" { // because these files are C and not C++
     #include "lcd.h"
     #include "touch.h"
@@ -42,6 +45,62 @@ extern "C" const lv_font_t raleway_128;
 namespace q = cycfi::q;
 using namespace q::literals;
 using std::fixed;
+
+//
+// User Settings Menu
+//
+
+/*
+
+SETTINGS
+    Tuning
+        In Tune Width
+            Show a slider and allow the user to choose integer values between 1 and 10. Save the setting into "user_in_tune_cents_width"
+        Back - returns to the main menu
+
+    Display Settings
+        Brightness
+            Show a slider and show values between 10 and 100. Save to a setting named "user_display_brightness" as a float value between 0.1 and 1.0
+        Note Color
+            Show a color picker and save setting to a variable named "user_note_name_color"
+        Indicator Color
+            Show a color picker and save the estting into a variable named "user_pitch_indicator_color"
+        Indicator Width
+            Show a slider with integer values between 4 and 20. Save the setting into "user_pitch_indicator_width"
+        Rotation
+            Allow the user to choose between: Normal, Upside Down, Left, or Right. Save the setting into "user_rotation_mode"
+        Back - returns to the main menu
+
+    Debug
+        Exp Smoothing
+            Allow the user to use a slider to choose a float value between 0.0 and 1.0. Show only 1 decimal after the decimal point. Save the setting into "user_exp_smoothing"
+        1EU Beta
+            Allow the user to use a slider to choose a float value between 0.000 and 2.000 allowing up to 3 decimal places of granularity. Save the setting into "user_1eu_beta"
+        Note Debouncing
+            Allow the user to use a slider to choose an integer value between 100 and 400. Save this setting into "user_note_debounce_interval"
+        Back - returns to the main menu
+        
+    Save & Exit -> Selecting this menu exits the settings menu
+*/
+
+// Variables to store settings
+long int        user_in_tune_cents_width    = 2;
+lv_color_t      user_note_name_color        = lv_color_hex(0xFFFFFF);
+lv_color_t      user_pitch_indicator_color  = lv_color_hex(0xFF0000);
+long int        user_pitch_indicator_width  = 8;
+long int        user_rotation_mode          = 0; // 0: Normal, 1: Upside Down, 2: Left, 3: Right
+float           user_exp_smoothing          = 0.15f;
+float           user_1eu_beta               = 0.007f;
+long int        user_note_debounce_interval = 110; // In milliseconds
+long int        user_display_brightness     = 0.75;
+
+// NVS Handle
+nvs_handle_t    nvs_settings_handle;
+
+// Function Prototypes for Settings
+void save_settings_to_nvs();
+void load_settings_from_nvs();
+void create_main_menu(lv_obj_t *parent);
 
 //
 // ADC-Related
@@ -68,6 +127,8 @@ using std::fixed;
 #define TUNER_ADC_FRAME_SIZE            1024
 #define TUNER_ADC_BUFFER_POOL_SIZE      4096
 #define TUNER_ADC_SAMPLE_RATE           (48 * 1000) // 48kHz
+
+#define WEIRD_ESP32_WROOM_32_FREQ_FIX_FACTOR    1.2222222223 // 11/9 but using 11/9 gives completely incorrect results. Weird.
 
 // HELTEC @ 20kHz
 // #define TUNER_ADC_FRAME_SIZE            (SOC_ADC_DIGI_DATA_BYTES_PER_CONV * 256)
@@ -98,11 +159,9 @@ using std::fixed;
 #define EU_FILTER_DERIVATIVE_CUTOFF     1
 
 // Exponential Smoother (not currently used)
-#define SMOOTHING_AMOUNT                0.25 // should be a value between 0.0 and 1.0
+//#define SMOOTHING_AMOUNT                0.25 // should be a value between 0.0 and 1.0
+#define SMOOTHING_AMOUNT                0.10 // should be a value between 0.0 and 1.0
 
-//
-// Pitch Name & Display
-//
 #define A4_FREQ                         440.0
 #define CENTS_PER_SEMITONE              100
 
@@ -111,14 +170,14 @@ using std::fixed;
 #define IN_TUNE_CENTS_WIDTH             2 // num of cents around the 0 point considered as "in tune"
 #define PITCH_INDICATOR_BAR_WIDTH       8
 
-#define MAX_PITCH_NAME_LENGTH           8
+#define MAX_PITCH_NAME_LENGTH           4
 #define NOTE_NAME_UPDATE_TIMER_INTERVAL 100 // milliseconds to debounce setting the note label
                                             // to keep LVGL happy without overloading it.
 using namespace cycfi::q::pitch_names;
 using frequency = cycfi::q::frequency;
 using pitch = cycfi::q::pitch;
 CONSTEXPR frequency low_fs = cycfi::q::pitch_names::C[1];
-CONSTEXPR frequency high_fs = cycfi::q::pitch_names::C[5];
+CONSTEXPR frequency high_fs = cycfi::q::pitch_names::C[7]; // Helps to catch the high harmonics
 
 static adc_channel_t channel[1] = {ADC_CHANNEL_7}; // ESP32-CYD
 // static adc_channel_t channel[1] = {ADC_CHANNEL_4}; // ESP32 - Heltec
@@ -137,7 +196,7 @@ static const double dcutoff = EU_FILTER_DERIVATIVE_CUTOFF;
 
 OneEuroFilter oneEUFilter(euFilterFreq, mincutoff, beta, dcutoff) ;
 
-lv_obj_t *note_name_label;
+static lv_obj_t *note_name_label;
 lv_style_t note_name_label_style;
 
 lv_obj_t *frequency_label;
@@ -185,7 +244,6 @@ const char * get_pitch_name_and_cents_from_frequency(float freq, float *cents) {
     if (note_index > 12) { // safeguard to prevent crash of snprintf()
         note_index = 0;
     }
-    // snprintf(pitch_name, MAX_PITCH_NAME_LENGTH, "%s", note_names[note_index]);
     // pitch_name[strlen(note_names[note_index])] = '\0';
     return note_names[note_index];
 }
@@ -326,19 +384,17 @@ void create_ruler(lv_obj_t * parent) {
 
 // This function is for debug and will just show the frequency and nothing else
 const char *lastDisplayedNote = no_freq_name;
-char noteNameBuffer[4];
+char noteNameBuffer[MAX_PITCH_NAME_LENGTH];
 
 void set_note_name_cb(lv_timer_t * timer) {
     // The note name is in the timer's user data
     lvgl_port_lock(0);
     const char *note_string = (const char *)lv_timer_get_user_data(timer);
-    snprintf(noteNameBuffer, 4, "%s", note_string);
-    lv_label_set_text_static(note_name_label, noteNameBuffer);
+    memset(noteNameBuffer, '\0', MAX_PITCH_NAME_LENGTH);
+    snprintf(noteNameBuffer, MAX_PITCH_NAME_LENGTH, "%s", note_string);
+    lv_label_set_text_static(note_name_label, (const char *)noteNameBuffer);
 
-    if (note_name_update_timer != NULL) {
-        lv_timer_del(note_name_update_timer);
-    }
-    note_name_update_timer = NULL;
+    lv_timer_pause(timer);
     lvgl_port_unlock();
 }
 
@@ -346,15 +402,9 @@ void update_note_name(const char *new_value) {
     // Set the note name with a timer so it doesn't get
     // set too often for LVGL. ADC makes it run SUPER
     // fast and can crash the software.
-    if (note_name_update_timer != NULL) {
-        // An existing timer is running and needs
-        // to be cancelled / deleted.
-        lv_timer_del(note_name_update_timer);
-    }
-
-    // Create a new timer that will fire. This will
-    // debounce the calls to the UI to update the note name.
-    note_name_update_timer = lv_timer_create(set_note_name_cb, NOTE_NAME_UPDATE_TIMER_INTERVAL, (void *)new_value);
+    lv_timer_set_user_data(note_name_update_timer, (void *)new_value);
+    lv_timer_reset(note_name_update_timer);
+    lv_timer_resume(note_name_update_timer);
 }
 
 void display_pitch(float frequency, const char *noteName, float cents) {
@@ -462,12 +512,24 @@ static esp_err_t app_lvgl_main()
     create_ruler(scr);
     create_labels(scr);
 
+    // Create a new timer that will fire. This will
+    // debounce the calls to the UI to update the note name.
+    note_name_update_timer = lv_timer_create(set_note_name_cb, NOTE_NAME_UPDATE_TIMER_INTERVAL, NULL);
+    lv_timer_pause(note_name_update_timer);
+    lv_timer_reset(note_name_update_timer);
+
     lvgl_port_unlock();
 
     return ESP_OK;
 }
 
 extern "C" void app_main() {
+
+    // Initialize NVS (Persistent Flash Storage for User Settings)
+    nvs_flash_init();
+    nvs_open("settings", NVS_READWRITE, &nvs_settings_handle);
+    load_settings_from_nvs();
+
     // Start the Display Task
     xTaskCreatePinnedToCore(
         oledTask,           // callback function
@@ -540,7 +602,8 @@ static void oledTask(void *pvParameter) {
         }
 
         // vTaskDelay(pdMS_TO_TICKS(1)); // ~33 times per second
-        vTaskDelay(pdMS_TO_TICKS(100)); // Yields to reset watchdog
+        // vTaskDelay(pdMS_TO_TICKS(125)); // Yields to reset watchdog in milliseconds
+        vTaskDelay(pdMS_TO_TICKS(50)); // Yields to reset watchdog in milliseconds
     }
     vTaskDelay(portMAX_DELAY);
 }
@@ -701,23 +764,24 @@ static void readAndDetectTask(void *pvParameter) {
                     // Send in each value into the pitch detector
                     // if (pd(s) == true && elapsedTimeSinceLastUpdate >= minIntervalForFrequencyUpdate) { // calculated a frequency
                     if (pd(s) == true) { // calculated a frequency
-                        auto rawF = pd.get_frequency();
+                        auto f = pd.get_frequency();
 
-                        // Simple Expoential Smoothing
-                        auto expF = smoother.smooth(rawF);
+                        bool use1EUFilterFirst = false; // TODO: This may never be needed. Need to test which "feels" better for tuning
+                        if (use1EUFilterFirst) {
+                            // 1EU Filtering
+                            f = (float)oneEUFilter.filter((double)f, (TimeStamp)time_seconds); // Stores the current frequency in the global current_frequency variable
 
-                        // 1EU Filtering
-                        auto oneEuF = (float)oneEUFilter.filter((double)expF, (TimeStamp)time_seconds); // Stores the current frequency in the global current_frequency variable
-                        // current_frequency = oneEuF / (11/9); // approx 1.2222
-                        // current_frequency = oneEuF / (1/.8181); // approx 1.2222
-                        // auto fixFactor = 1/.81818181;
-                        auto fixFactor = 1.2222222223;
-                        current_frequency = oneEuF / fixFactor; // approx 1.2222
-                        // current_frequency = oneEuF;
+                            // Simple Exponential Smoothing
+                            f = smoother.smooth(f);
+                        } else {
+                            // Simple Expoential Smoothing
+                            f = smoother.smooth(f);
 
-                        // lastFrequencyRecordedTime = time_us;
+                            // 1EU Filtering
+                            f = (float)oneEUFilter.filter((double)f, (TimeStamp)time_seconds); // Stores the current frequency in the global current_frequency variable
+                        }
 
-                        // ESP_LOGI("QLib", "Range: %d, Raw: %f, ExpF: %f, 1EU: %f, corrected: %f", (int)range, rawF, expF, oneEuF, current_frequency);
+                        current_frequency = f / WEIRD_ESP32_WROOM_32_FREQ_FIX_FACTOR;
                     }
                 }
 
@@ -739,4 +803,34 @@ static void readAndDetectTask(void *pvParameter) {
 
     ESP_ERROR_CHECK(adc_continuous_stop(handle));
     ESP_ERROR_CHECK(adc_continuous_deinit(handle));
+}
+
+// NVS User Settings
+
+void save_settings_to_nvs() {
+    nvs_set_i32(nvs_settings_handle, "in_tune_width", user_in_tune_cents_width);
+    // nvs_set_f32(nvs_settings_handle, "display_brightness", user_display_brightness);
+    // nvs_set_u32(nvs_settings_handle, "note_name_color", user_note_name_color.full);
+    // nvs_set_u32(nvs_settings_handle, "indicator_color", user_pitch_indicator_color.full);
+    nvs_set_i32(nvs_settings_handle, "indicator_width", user_pitch_indicator_width);
+    nvs_set_i32(nvs_settings_handle, "rotation_mode", user_rotation_mode);
+    // nvs_set_f32(nvs_settings_handle, "exp_smoothing", user_exp_smoothing);
+    // nvs_set_f32(nvs_settings_handle, "1eu_beta", user_1eu_beta);
+    nvs_set_i32(nvs_settings_handle, "debounce_interval", user_note_debounce_interval);
+    nvs_commit(nvs_settings_handle);
+}
+
+void load_settings_from_nvs() {
+    nvs_get_i32(nvs_settings_handle, "in_tune_width", &user_in_tune_cents_width);
+    // nvs_get_f32(nvs_settings_handle, "display_brightness", &user_display_brightness);
+    // uint32_t temp_color;
+    // nvs_get_u32(nvs_settings_handle, "note_name_color", &temp_color);
+    // user_note_name_color.full = temp_color;
+    // nvs_get_u32(nvs_settings_handle, "indicator_color", &temp_color);
+    // user_pitch_indicator_color.full = temp_color;
+    nvs_get_i32(nvs_settings_handle, "indicator_width", &user_pitch_indicator_width);
+    nvs_get_i32(nvs_settings_handle, "rotation_mode", &user_rotation_mode);
+    // nvs_get_f32(nvs_settings_handle, "exp_smoothing", &user_exp_smoothing);
+    // nvs_get_f32(nvs_settings_handle, "1eu_beta", &user_1eu_beta);
+    nvs_get_i32(nvs_settings_handle, "debounce_interval", &user_note_debounce_interval);
 }
