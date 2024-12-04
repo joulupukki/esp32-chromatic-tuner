@@ -112,6 +112,8 @@ using std::fixed;
 #define PITCH_INDICATOR_BAR_WIDTH       8
 
 #define MAX_PITCH_NAME_LENGTH           8
+#define NOTE_NAME_UPDATE_TIMER_INTERVAL 100 // milliseconds to debounce setting the note label
+                                            // to keep LVGL happy without overloading it.
 
 using namespace cycfi::q::pitch_names;
 using frequency = cycfi::q::frequency;
@@ -155,6 +157,7 @@ static const char *note_names[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G
 static const char *no_freq_name = "-";
 lv_anim_t pitch_animation;
 lv_coord_t last_pitch_indicator_pos = (lv_coord_t)0.0;
+lv_timer_t *note_name_update_timer = NULL;
 
 // Function to calculate the MIDI note number from frequency
 float midi_note_from_frequency(float freq) {
@@ -326,6 +329,35 @@ void create_ruler(lv_obj_t * parent) {
 const char *lastDisplayedNote = no_freq_name;
 char noteNameBuffer[4];
 
+void set_note_name_cb(lv_timer_t * timer) {
+    // The note name is in the timer's user data
+    lvgl_port_lock(0);
+    const char *note_string = (const char *)lv_timer_get_user_data(timer);
+    snprintf(noteNameBuffer, 4, "%s", note_string);
+    lv_label_set_text_static(note_name_label, noteNameBuffer);
+
+    if (note_name_update_timer != NULL) {
+        lv_timer_del(note_name_update_timer);
+    }
+    note_name_update_timer = NULL;
+    lvgl_port_unlock();
+}
+
+void update_note_name(const char *new_value) {
+    // Set the note name with a timer so it doesn't get
+    // set too often for LVGL. ADC makes it run SUPER
+    // fast and can crash the software.
+    if (note_name_update_timer != NULL) {
+        // An existing timer is running and needs
+        // to be cancelled / deleted.
+        lv_timer_del(note_name_update_timer);
+    }
+
+    // Create a new timer that will fire. This will
+    // debounce the calls to the UI to update the note name.
+    note_name_update_timer = lv_timer_create(set_note_name_cb, NOTE_NAME_UPDATE_TIMER_INTERVAL, (void *)new_value);
+}
+
 void display_pitch(float frequency, const char *noteName, float cents) {
     if (noteName != NULL) {
         lv_label_set_text_fmt(frequency_label, "%.2f", frequency);
@@ -333,8 +365,7 @@ void display_pitch(float frequency, const char *noteName, float cents) {
 
         // Show a noteName with indicators
         if (lastDisplayedNote != noteName) {
-            snprintf(noteNameBuffer, 4, "%s", noteName);
-            lv_label_set_text_static(note_name_label, noteNameBuffer); // need to use because of ADC (being changed so frequently)
+            update_note_name(noteName);
             lastDisplayedNote = noteName; // prevent setting this so often to help prevent an LVGL crash
         }
 
@@ -369,9 +400,7 @@ void display_pitch(float frequency, const char *noteName, float cents) {
     } else {
         // Hide the pitch and indicators since it's not detected
         if (lastDisplayedNote != no_freq_name) {
-            snprintf(noteNameBuffer, 4, "%s", no_freq_name);
-            lv_label_set_text_static(note_name_label, noteNameBuffer);
-            // lv_obj_center(note_name_label);
+            update_note_name(no_freq_name);
             lastDisplayedNote = no_freq_name;
         }
 
