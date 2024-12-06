@@ -39,4 +39,4 @@
 #define TOUCH_CS       (gpio_num_t) GPIO_NUM_33
 #define TOUCH_DC       (gpio_num_t) GPIO_NUM_NC
 #define TOUCH_RST      (gpio_num_t) GPIO_NUM_NC
-#define TOUCH_IRQ      (gpio_num_t) GPIO_NUM_36
+#define TOUCH_IRQ      (gpio_num_t) GPIO_NUM_NC // GPIO_NUM_36
