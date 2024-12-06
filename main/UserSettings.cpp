@@ -10,10 +10,14 @@
 #define MENU_BTN_IN_TUNE_THRESHOLD  "In-Tune Threshold"
 
 #define MENU_BTN_DISPLAY            "Display"
-#define MENU_BTN_BRIGHTNESS         "Brightness"
-#define MENU_BTN_NOTE_COLOR         "Note Color"
-#define MENU_BTN_INDICATOR_COLOR    "Indicator Color"
-#define MENU_BTN_ROTATION           "Rotation"
+    #define MENU_BTN_BRIGHTNESS         "Brightness"
+    #define MENU_BTN_NOTE_COLOR         "Note Color"
+    #define MENU_BTN_INDICATOR_COLOR    "Indicator Color"
+    #define MENU_BTN_ROTATION           "Rotation"
+        #define MENU_BTN_ROTATION_NORMAL    "Normal"
+        #define MENU_BTN_ROTATION_LEFT      "Left"
+        #define MENU_BTN_ROTATION_RIGHT     "Right"
+        #define MENU_BTN_ROTATION_UPSIDE_DN "Upside Down"
 
 #define MENU_BTN_DEBUG              "Advanced"
 #define MENU_BTN_EXP_SMOOTHING      "Exp Smoothing"
@@ -96,15 +100,36 @@ void UserSettings::showAboutMenu() {
 // PUBLIC Methods
 //
 
-UserSettings::UserSettings(lv_obj_t * mainScreen) {
+UserSettings::UserSettings(lv_display_t *display, lv_obj_t * mainScreen) {
+    lvglDisplay = display;
     screenStack.push_back(mainScreen); // Add the main screen so we can load this when exiting the menu
 }
 
 void UserSettings::showSettings() {
+    isShowingMenu = true;
+    const char *buttonNames[] = {
+        MENU_BTN_TUNER,
+        MENU_BTN_DISPLAY,
+        MENU_BTN_DEBUG,
+        MENU_BTN_ABOUT,
+        // MENU_BTN_EXIT,
+    };
+    lv_event_cb_t callbackFunctions[] = {
+        handleTunerButtonClicked,
+        handleDisplayButtonClicked,
+        handleDebugButtonClicked,
+        handleAboutButtonClicked,
+    };
+    createMenu(buttonNames, callbackFunctions, 4);
+}
+
+void UserSettings::createMenu(const char *buttonNames[], lv_event_cb_t eventCallbacks[], int numOfButtons) {
+    // Create a new screen, add all the buttons to it,
+    // add the screen to the stack, and activate the new screen
     if (!lvgl_port_lock(0)) {
         return;
     }
-    // Create a new screen for the main menu
+
     lv_obj_t *scr = lv_obj_create(NULL);
 
     // Create a scrollable container
@@ -115,31 +140,61 @@ void UserSettings::showSettings() {
     lv_obj_set_scrollbar_mode(scrollable, LV_SCROLLBAR_MODE_AUTO); // Show scrollbar when scrolling
     lv_obj_set_style_pad_all(scrollable, 10, 0);           // Add padding for aesthetics
     lv_obj_set_style_bg_color(scrollable, lv_palette_darken(LV_PALETTE_BLUE_GREY, 4), 0); // Optional background color
-    // lv_obj_set_style_bg_color(scrollable, lv_palette_lighten(LV_PALETTE_GREY, 4), 0); // Optional background color
-    // lv_obj_set_style_bg_color(scrollable, lv_color_black(), 0); // Optional background color
 
     lv_obj_t *btn;
     lv_obj_t *label;
 
-    // Tuning Button
-    btn = lv_btn_create(scrollable);
-    lv_obj_set_width(btn, lv_pct(100));
-    lv_obj_set_user_data(btn, (void *)MENU_BTN_TUNER);
-    // lv_obj_add_event_cb(btn, &UserSettings::handleButtonClick, LV_EVENT_CLICKED, btn);
-    label = lv_label_create(btn);
-    lv_label_set_text_static(label, MENU_BTN_TUNER);
+    int32_t buttonWidthPercentage = 100;
 
-    // Exit Button
-    btn = lv_btn_create(scrollable);
-    lv_obj_set_user_data(btn, this);
-    lv_obj_set_width(btn, lv_pct(100));
-    lv_obj_add_event_cb(btn, handleExitButtonClicked, LV_EVENT_CLICKED, btn);
-    label = lv_label_create(btn);
-    lv_label_set_text_static(label, MENU_BTN_EXIT);
+    for (int i = 0; i < numOfButtons; i++) {
+        ESP_LOGI("Settings", "Creating menu item: %d of %d", i, numOfButtons);
+        const char *buttonName = buttonNames[i];
+        lv_event_cb_t eventCallback = eventCallbacks[i];
+        btn = lv_btn_create(scrollable);
+        lv_obj_set_width(btn, lv_pct(buttonWidthPercentage));
+        lv_obj_set_user_data(btn, this);
+        lv_obj_add_event_cb(btn, eventCallback, LV_EVENT_CLICKED, btn);
+        label = lv_label_create(btn);
+        lv_label_set_text_static(label, buttonName);
+    }
 
-    screenStack.push_back(scr);
+    if (screenStack.size() == 1) {
+        // We're on the top menu - include an exit button
+        btn = lv_btn_create(scrollable);
+        lv_obj_set_user_data(btn, this);
+        lv_obj_set_width(btn, lv_pct(buttonWidthPercentage));
+        lv_obj_add_event_cb(btn, handleExitButtonClicked, LV_EVENT_CLICKED, btn);
+        label = lv_label_create(btn);
+        lv_label_set_text_static(label, MENU_BTN_EXIT);
+    } else {
+        // We're in a submenu - include a back button
+        btn = lv_btn_create(scrollable);
+        lv_obj_set_user_data(btn, this);
+        lv_obj_set_width(btn, lv_pct(buttonWidthPercentage));
+        lv_obj_add_event_cb(btn, handleBackButtonClicked, LV_EVENT_CLICKED, btn);
+        label = lv_label_create(btn);
+        lv_label_set_text_static(label, MENU_BTN_BACK);
+    }
 
-    lv_screen_load(scr);
+    screenStack.push_back(scr); // Save the new screen on the stack
+    lv_screen_load(scr);        // Activate the new screen
+    lvgl_port_unlock();
+}
+
+void UserSettings::removeCurrentMenu() {
+    if (!lvgl_port_lock(0)) {
+        return;
+    }
+
+    lv_obj_t *currentScreen = screenStack.back();
+    screenStack.pop_back();
+
+    lv_obj_t *parentScreen = screenStack.back();
+    lv_scr_load(parentScreen);      // Show the parent screen
+
+    lv_obj_clean(currentScreen);    // Clean up the screen so memory is cleared from sub items
+    lv_obj_del(currentScreen);      // Remove the old screen from memory
+
     lvgl_port_unlock();
 }
 
@@ -154,22 +209,63 @@ void UserSettings::exitSettings() {
     // Remove all but the first item out of the screenStack.
     while (screenStack.size() > 1) {
         lv_obj_t *scr = screenStack.back();
+        lv_obj_clean(scr);  // Clean up sub object memory
         lv_obj_del(scr);
 
         screenStack.pop_back();
     }
 
     lvgl_port_unlock();
+    isShowingMenu = false;
+}
+
+void UserSettings::rotateScreenTo(TunerOrientation newRotation) {
+    if (!lvgl_port_lock(0)) {
+        return;
+    }
+
+    lv_display_rotation_t new_rotation = LV_DISPLAY_ROTATION_0;
+    switch (newRotation)
+    {
+    case orientationNormal:
+        new_rotation = LV_DISPLAY_ROTATION_180;
+        break;
+    case orientationLeft:
+        new_rotation = LV_DISPLAY_ROTATION_90;
+        break;
+    case orientationRight:
+        new_rotation = LV_DISPLAY_ROTATION_270;
+        break;
+    default:
+        new_rotation = LV_DISPLAY_ROTATION_0;
+        break;
+    }
+
+    if (lv_display_get_rotation(lvglDisplay) != new_rotation) {
+        ESP_ERROR_CHECK(lcd_display_rotate(lvglDisplay, new_rotation));
+
+        // TODO: Save this off into user preferences.
+    }
+
+    lvgl_port_unlock();
 }
 
 static void handleExitButtonClicked(lv_event_t *e) {
+    ESP_LOGI("Settings", "Exit button clicked");
     UserSettings *settings = (UserSettings *)lv_obj_get_user_data((lv_obj_t *)lv_event_get_target(e));
     settings->exitSettings();
 }
 
 static void handleTunerButtonClicked(lv_event_t *e) {
-    UserSettings *settings = (UserSettings *)lv_obj_get_user_data((lv_obj_t *)lv_event_get_target(e));
     ESP_LOGI("Settings", "Tuner button clicked");
+    UserSettings *settings = (UserSettings *)lv_obj_get_user_data((lv_obj_t *)lv_event_get_target(e));
+    const char *buttonNames[] = {
+        MENU_BTN_IN_TUNE_THRESHOLD,
+    };
+    lv_event_cb_t callbackFunctions[] = {
+        handleInTuneThresholdButtonClicked,
+    };
+    settings->createMenu(buttonNames, callbackFunctions, 1);
 }
 
 static void handleInTuneThresholdButtonClicked(lv_event_t *e) {
@@ -178,8 +274,21 @@ static void handleInTuneThresholdButtonClicked(lv_event_t *e) {
 }
 
 static void handleDisplayButtonClicked(lv_event_t *e) {
+    ESP_LOGI("Settings", "Display button clicked");
     UserSettings *settings = (UserSettings *)lv_obj_get_user_data((lv_obj_t *)lv_event_get_target(e));
-
+    const char *buttonNames[] = {
+        MENU_BTN_BRIGHTNESS,
+        MENU_BTN_NOTE_COLOR,
+        MENU_BTN_INDICATOR_COLOR,
+        MENU_BTN_ROTATION,
+    };
+    lv_event_cb_t callbackFunctions[] = {
+        handleBrightnessButtonClicked,
+        handleNoteColorButtonClicked,
+        handleIndicatorButtonClicked,
+        handleRotationButtonClicked,
+    };
+    settings->createMenu(buttonNames, callbackFunctions, 4);
 }
 
 static void handleBrightnessButtonClicked(lv_event_t *e) {
@@ -198,8 +307,45 @@ static void handleIndicatorButtonClicked(lv_event_t *e) {
 }
 
 static void handleRotationButtonClicked(lv_event_t *e) {
+    ESP_LOGI("Settings", "Rotation button clicked");
     UserSettings *settings = (UserSettings *)lv_obj_get_user_data((lv_obj_t *)lv_event_get_target(e));
+    const char *buttonNames[] = {
+        MENU_BTN_ROTATION_NORMAL,
+        MENU_BTN_ROTATION_LEFT,
+        MENU_BTN_ROTATION_RIGHT,
+        MENU_BTN_ROTATION_UPSIDE_DN,
+    };
+    lv_event_cb_t callbackFunctions[] = {
+        handleRotationNormalClicked,
+        handleRotationLeftClicked,
+        handleRotationRightClicked,
+        handleRotationUpsideDnClicked,
+    };
+    settings->createMenu(buttonNames, callbackFunctions, 4);
+}
 
+static void handleRotationNormalClicked(lv_event_t *e) {
+    ESP_LOGI("Settings", "Rotation Normal clicked");
+    UserSettings *settings = (UserSettings *)lv_obj_get_user_data((lv_obj_t *)lv_event_get_target(e));
+    settings->rotateScreenTo(orientationNormal);
+}
+
+static void handleRotationLeftClicked(lv_event_t *e) {
+    ESP_LOGI("Settings", "Rotation Left clicked");
+    UserSettings *settings = (UserSettings *)lv_obj_get_user_data((lv_obj_t *)lv_event_get_target(e));
+    settings->rotateScreenTo(orientationLeft);
+}
+
+static void handleRotationRightClicked(lv_event_t *e) {
+    ESP_LOGI("Settings", "Rotation Right clicked");
+    UserSettings *settings = (UserSettings *)lv_obj_get_user_data((lv_obj_t *)lv_event_get_target(e));
+    settings->rotateScreenTo(orientationRight);
+}
+
+static void handleRotationUpsideDnClicked(lv_event_t *e) {
+    ESP_LOGI("Settings", "Rotation Upside Down clicked");
+    UserSettings *settings = (UserSettings *)lv_obj_get_user_data((lv_obj_t *)lv_event_get_target(e));
+    settings->rotateScreenTo(orientationUpsideDown);
 }
 
 static void handleDebugButtonClicked(lv_event_t *e) {
@@ -238,7 +384,8 @@ static void handleAboutButtonClicked(lv_event_t *e) {
 }
 
 static void handleBackButtonClicked(lv_event_t *e) {
+    ESP_LOGI("Settings", "Back button clicked");
     UserSettings *settings = (UserSettings *)lv_obj_get_user_data((lv_obj_t *)lv_event_get_target(e));
-
+    settings->removeCurrentMenu();
 }
 

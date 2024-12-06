@@ -84,7 +84,8 @@ nvs_handle_t    nvs_settings_handle;
 void save_settings_to_nvs();
 void load_settings_from_nvs();
 
-UserSettings *userSettings;
+UserSettings *userSettings = NULL;
+bool is_ui_initialized = false;
 
 typedef enum {
     SCREEN_STANDBY = 0,
@@ -400,6 +401,7 @@ char noteNameBuffer[MAX_PITCH_NAME_LENGTH];
 
 void set_note_name_cb(lv_timer_t * timer) {
     // The note name is in the timer's user data
+    ESP_LOGI("LOCK", "locking in set_note_name_cb");
     lvgl_port_lock(0);
     const char *note_string = (const char *)lv_timer_get_user_data(timer);
     memset(noteNameBuffer, '\0', MAX_PITCH_NAME_LENGTH);
@@ -407,7 +409,10 @@ void set_note_name_cb(lv_timer_t * timer) {
     lv_label_set_text_static(note_name_label, (const char *)noteNameBuffer);
 
     lv_timer_pause(timer);
+
+    ESP_LOGI("LOCK", "unlocking in set_note_name_cb");
     lvgl_port_unlock();
+    ESP_LOGI("LOCK", "unlocked in set_note_name_cb");
 }
 
 void update_note_name(const char *new_value) {
@@ -514,26 +519,42 @@ static void continuous_adc_init(adc_channel_t *channel, uint8_t channel_count, a
 }
 
 static esp_err_t app_lvgl_main() {
+    // ESP_LOGI("LOCK", "locking in app_lvgl_main");
     lvgl_port_lock(0);
+    // ESP_LOGI("LOCK", "locked in app_lvgl_main");
 
     lv_obj_t *scr = lv_scr_act();
+    // ESP_LOGI("LOCK", "A");
     screen_width = lv_obj_get_width(scr);
+    // ESP_LOGI("LOCK", "B");
     screen_height = lv_obj_get_height(scr);
+    // ESP_LOGI("LOCK", "C");
     lv_obj_set_style_bg_color(scr, lv_color_hex(0x000000), LV_PART_MAIN);
+    // ESP_LOGI("LOCK", "D");
     lv_obj_set_scrollbar_mode(scr, LV_SCROLLBAR_MODE_OFF);
+    // ESP_LOGI("LOCK", "E");
     create_ruler(scr);
+    // ESP_LOGI("LOCK", "F");
     create_labels(scr);
+    // ESP_LOGI("LOCK", "G");
     create_settings_menu_button(scr);
-    userSettings = new UserSettings(scr);
+    // ESP_LOGI("LOCK", "H");
     main_screen = scr;
+    // ESP_LOGI("LOCK", "I");
 
     // Create a new timer that will fire. This will
     // debounce the calls to the UI to update the note name.
     note_name_update_timer = lv_timer_create(set_note_name_cb, NOTE_NAME_UPDATE_TIMER_INTERVAL, NULL);
+    // ESP_LOGI("LOCK", "J");
     lv_timer_pause(note_name_update_timer);
+    // ESP_LOGI("LOCK", "K");
     lv_timer_reset(note_name_update_timer);
 
+    ESP_LOGI("LOCK", "unlocking in app_lvgl_main");
     lvgl_port_unlock();
+    ESP_LOGI("LOCK", "unlocked in app_lvgl_main");
+
+    userSettings = new UserSettings(lvgl_display, main_screen);
 
     return ESP_OK;
 }
@@ -562,7 +583,7 @@ extern "C" void app_main() {
         "detect",           // debug name of the task
         4096,               // stack depth (no idea what this should be)
         NULL,               // params to pass to the callback function
-        10,                 // ux priority - higher value is higher priority
+        1,                  // ux priority - higher value is higher priority
         NULL,               // handle to the created task - we don't need it
         1                   // Core ID
     );
@@ -576,11 +597,15 @@ static void oledTask(void *pvParameter) {
     esp_lcd_panel_handle_t lcd_panel;
     esp_lcd_touch_handle_t tp;
     lvgl_port_touch_cfg_t touch_cfg;
+// ESP_LOGI("BHT", "a");
 
     ESP_ERROR_CHECK(lcd_display_brightness_init());
+// ESP_LOGI("BHT", "b");
 
     ESP_ERROR_CHECK(app_lcd_init(&lcd_io, &lcd_panel));
+// ESP_LOGI("BHT", "c");
     lvgl_display = app_lvgl_init(lcd_io, lcd_panel);
+// ESP_LOGI("BHT", "d");
     if (lvgl_display == NULL)
     {
         ESP_LOGI(TAG, "fatal error in app_lvgl_init");
@@ -588,15 +613,22 @@ static void oledTask(void *pvParameter) {
     }
 
     ESP_ERROR_CHECK(touch_init(&tp));
+// ESP_LOGI("BHT", "e");
     touch_cfg.disp = lvgl_display;
     touch_cfg.handle = tp;
     lvgl_port_add_touch(&touch_cfg);
 
-    ESP_ERROR_CHECK(lcd_display_brightness_set(75));
-    ESP_ERROR_CHECK(lcd_display_rotate(lvgl_display, LV_DISPLAY_ROTATION_90));
-    // ESP_ERROR_CHECK(lcd_display_rotate(lvgl_display, LV_DISPLAY_ROTATION_0)); // Upside Down
+    if (lvgl_port_lock(0)) {
+        ESP_ERROR_CHECK(lcd_display_brightness_set(75));
+// ESP_LOGI("BHT", "f");
+        ESP_ERROR_CHECK(lcd_display_rotate(lvgl_display, LV_DISPLAY_ROTATION_90));
+// ESP_LOGI("BHT", "g");
+        // ESP_ERROR_CHECK(lcd_display_rotate(lvgl_display, LV_DISPLAY_ROTATION_0)); // Upside Down
+        lvgl_port_unlock();
+    }
 
     ESP_ERROR_CHECK(app_lvgl_main());
+// ESP_LOGI("BHT", "i");
 
     float cents;
 
@@ -604,7 +636,7 @@ static void oledTask(void *pvParameter) {
         lv_task_handler();
 
         // Lock the mutex due to the LVGL APIs are not thread-safe
-        if (lvgl_port_lock(0)) {
+        if (userSettings != NULL && !userSettings->isShowingMenu && lvgl_port_lock(0)) {
             // display_frequency(current_frequency);
             if (current_frequency > 0) {
                 const char *noteName = get_pitch_name_and_cents_from_frequency(current_frequency, &cents);
@@ -692,6 +724,12 @@ static void readAndDetectTask(void *pvParameter) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
         while (1) {
+            if (userSettings == NULL || userSettings->isShowingMenu) {
+                // Don't read the signal when the settings menu is showing.
+                vTaskDelay(pdMS_TO_TICKS(500));
+                continue;
+            }
+
             std::vector<float> in(TUNER_ADC_FRAME_SIZE); // a vector of values to pass into qlib
 
             ret = adc_continuous_read(handle, adc_buffer, TUNER_ADC_FRAME_SIZE, &num_of_bytes_read, portMAX_DELAY);

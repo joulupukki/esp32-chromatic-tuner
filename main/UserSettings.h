@@ -13,6 +13,10 @@
 #include "esp_lvgl_port.h"
 #include "esp_log.h"
 
+extern "C" { // because these files are C and not C++
+    #include "lcd.h"
+}
+
 enum TunerOrientation: std::uint8_t {
     orientationNormal,
     orientationLeft,
@@ -32,6 +36,7 @@ class UserSettings {
      * `screenStack`.
      */
     std::vector<lv_obj_t*> screenStack;
+    lv_display_t *lvglDisplay;
 
     // User Setting Variables
     uint8_t             user_in_tune_cents_width    = 2;
@@ -46,37 +51,48 @@ class UserSettings {
 
     void saveSettings();
 
-    void handleButtonClick(lv_event_t *e);
-
     void showTunerMenu();
     void showDisplayMenu();
     void showAdvancedMenu();
     void showAboutMenu();
 public:
+    bool isShowingMenu = false;
+
     /**
      * @brief Create the settings object and sets its parameters
      * @param mainScreen The LVGL main screen in the app.
      */
-    UserSettings(lv_obj_t * mainScreen);
+    UserSettings(lv_display_t *display, lv_obj_t * mainScreen);
 
     /**
      * @brief Pause tuning or standby mode and show the settings menu/screen.
      */
     void showSettings();
 
+    void createMenu(const char *buttonNames[], lv_event_cb_t eventCallbacks[], int numOfButtons);
+    void removeCurrentMenu();
+
     /**
      * @brief Exit the settings menu/screen and resume tuning/standby mode.
      */
     void exitSettings();
+
+    void rotateScreenTo(TunerOrientation newRotation);
 };
 
 static void handleTunerButtonClicked(lv_event_t *e);
 static void handleInTuneThresholdButtonClicked(lv_event_t *e);
+
 static void handleDisplayButtonClicked(lv_event_t *e);
 static void handleBrightnessButtonClicked(lv_event_t *e);
 static void handleNoteColorButtonClicked(lv_event_t *e);
 static void handleIndicatorButtonClicked(lv_event_t *e);
 static void handleRotationButtonClicked(lv_event_t *e);
+static void handleRotationNormalClicked(lv_event_t *e);
+static void handleRotationLeftClicked(lv_event_t *e);
+static void handleRotationRightClicked(lv_event_t *e);
+static void handleRotationUpsideDnClicked(lv_event_t *e);
+
 static void handleDebugButtonClicked(lv_event_t *e);
 static void handleExpSmoothingButtonClicked(lv_event_t *e);
 static void handle1EUBetaButtonClicked(lv_event_t *e);

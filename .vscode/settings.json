@@ -11,6 +11,7 @@
         "future": "cpp",
         "optional": "cpp",
         "__locale": "cpp",
-        "ios": "cpp"
+        "ios": "cpp",
+        "vector": "cpp"
     }
 }
