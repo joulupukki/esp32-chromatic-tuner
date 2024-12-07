@@ -66,7 +66,7 @@ public:
     bool isShowingMenu = false;
 
     // User Setting Variables
-    uint8_t             inTuneCentsWidth        = DEFAULT_IN_TUNE_CENTS_WIDTH;    // 2,                     Range 1 - 8
+    uint8_t             inTuneCentsWidth        = DEFAULT_IN_TUNE_CENTS_WIDTH;    // 2,                     Range 1 - 6
     lv_palette_t        noteNamePalette         = DEFAULT_NOTE_NAME_PALETTE; // white. Use lv_color_t c = lv_palette_main(LV_PALETTE_...) to get a color in LVGL. In the case of white, use lv_color_white()
     TunerOrientation    displayOrientation      = DEFAULT_DISPLAY_ORIENTATION;
     float               expSmoothing            = DEFAULT_EXP_SMOOTHING;   // 15 * .01 = 0.15,              Range: 0 - 100
@@ -106,6 +106,7 @@ public:
     void createMenu(const char *buttonNames[], lv_event_cb_t eventCallbacks[], int numOfButtons);
     void removeCurrentMenu();
     void createSlider(const char *sliderName, int32_t minRange, int32_t maxRange, lv_event_cb_t sliderCallback, float *sliderValue);
+    void createRoller(const char *title, const char *itemsString, lv_event_cb_t rollerCallback, uint8_t *rollerValue);
 
     /**
      * @brief Exit the settings menu/screen and resume tuning/standby mode.
@@ -117,6 +118,8 @@ public:
 
 static void handleTunerButtonClicked(lv_event_t *e);
 static void handleInTuneThresholdButtonClicked(lv_event_t *e);
+static void handleInTuneThresholdButtonValueClicked(lv_event_t *e);
+static void handleInTuneThresholdRoller(lv_event_t *e);
 
 static void handleDisplayButtonClicked(lv_event_t *e);
 static void handleBrightnessButtonClicked(lv_event_t *e);

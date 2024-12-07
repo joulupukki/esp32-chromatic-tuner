@@ -137,8 +137,6 @@ lv_obj_t *main_screen = NULL;
 #define CENTS_PER_SEMITONE              100
 
 #define INDICATOR_SEGMENTS              100 // num of visual segments for showing tuning accuracy
-// #define IN_TUNE_CENTS_WIDTH             4 // num of cents around the 0 point considered as "in tune"
-#define IN_TUNE_CENTS_WIDTH             2 // num of cents around the 0 point considered as "in tune"
 #define PITCH_INDICATOR_BAR_WIDTH       8
 
 #define MAX_PITCH_NAME_LENGTH           4
@@ -416,7 +414,7 @@ void display_pitch(float frequency, const char *noteName, float cents) {
         // auto cents_per_side = CENTS_PER_SEMITONE / 2;
         // lv_coord_t half_width = screen_width / 2;
 
-        if (abs(cents) <= IN_TUNE_CENTS_WIDTH / 2) {
+        if (abs(cents) <= userSettings->inTuneCentsWidth / 2) {
             // Show this as perfectly in tune
             indicator_x_pos = 0;
         } else {
