@@ -414,6 +414,99 @@ void UserSettings::createRoller(const char *title, const char *itemsString, lv_e
     lvgl_port_unlock();
 }
 
+static void lv_spinbox_increment_event_cb(lv_event_t * e)
+{
+    if (!lvgl_port_lock(0)) {
+        return;
+    }
+    lv_event_code_t code = lv_event_get_code(e);
+    lv_obj_t *btn = (lv_obj_t *)lv_event_get_target(e);
+    lv_obj_t *spinbox = (lv_obj_t *)lv_obj_get_user_data(btn);
+    if(code == LV_EVENT_SHORT_CLICKED || code  == LV_EVENT_LONG_PRESSED_REPEAT) {
+        lv_spinbox_increment(spinbox);
+
+        float *spinboxValue = (float *)lv_event_get_user_data(e);
+        int32_t newValue = lv_spinbox_get_value(spinbox);
+        ESP_LOGI("Settings", "New spinbox value: %ld", newValue);
+        *spinboxValue = newValue * .01;
+    }
+    lvgl_port_unlock();
+}
+
+static void lv_spinbox_decrement_event_cb(lv_event_t * e)
+{
+    if (!lvgl_port_lock(0)) {
+        return;
+    }
+    lv_event_code_t code = lv_event_get_code(e);
+    lv_obj_t *btn = (lv_obj_t *)lv_event_get_target(e);
+    lv_obj_t *spinbox = (lv_obj_t *)lv_obj_get_user_data(btn);
+    if(code == LV_EVENT_SHORT_CLICKED || code == LV_EVENT_LONG_PRESSED_REPEAT) {
+        lv_spinbox_decrement(spinbox);
+
+        float *spinboxValue = (float *)lv_event_get_user_data(e);
+        int32_t newValue = lv_spinbox_get_value(spinbox);
+        ESP_LOGI("Settings", "New spinbox value: %ld", newValue);
+        *spinboxValue = newValue * .01;
+    }
+    lvgl_port_unlock();
+}
+
+void UserSettings::createSpinbox(const char *title, uint32_t minRange, uint32_t maxRange, uint32_t digitCount, uint32_t separatorPosition, float *spinboxValue) {
+    if (!lvgl_port_lock(0)) {
+        return;
+    }
+    lv_obj_t *scr = lv_obj_create(NULL);
+
+    // lv_obj_set_style_pad_bottom(scr, 10, 0);
+    lv_obj_set_style_bg_color(scr, lv_color_black(), 0); // Optional background color
+
+    // Show the title of the screen at the top middle
+    lv_obj_t *label = lv_label_create(scr);
+    lv_label_set_text_static(label, title);
+    lv_obj_set_width(label, lv_pct(100));
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(label, LV_ALIGN_TOP_MID, 0, 0);
+
+    lv_obj_t * spinbox = lv_spinbox_create(scr);
+    lv_spinbox_set_range(spinbox, minRange, maxRange);
+    lv_obj_set_style_text_font(spinbox, &lv_font_montserrat_36, 0);
+    lv_spinbox_set_digit_format(spinbox, digitCount, separatorPosition);
+    lv_spinbox_set_value(spinbox, *spinboxValue * 100);
+    lv_spinbox_step_prev(spinbox); // Moves the step (cursor)
+    // lv_obj_set_width(spinbox, 100);
+    lv_obj_center(spinbox);
+
+    int32_t h = lv_obj_get_height(spinbox);
+
+    lv_obj_t * btn = lv_button_create(scr);
+    lv_obj_set_user_data(btn, spinbox);
+    lv_obj_set_size(btn, h, h);
+    lv_obj_align_to(btn, spinbox, LV_ALIGN_OUT_RIGHT_MID, 5, 0);
+    lv_obj_set_style_bg_image_src(btn, LV_SYMBOL_PLUS, 0);
+    lv_obj_add_event_cb(btn, lv_spinbox_increment_event_cb, LV_EVENT_ALL, spinboxValue);
+
+    btn = lv_button_create(scr);
+    lv_obj_set_user_data(btn, spinbox);
+    lv_obj_set_size(btn, h, h);
+    lv_obj_align_to(btn, spinbox, LV_ALIGN_OUT_LEFT_MID, -5, 0);
+    lv_obj_set_style_bg_image_src(btn, LV_SYMBOL_MINUS, 0);
+    lv_obj_add_event_cb(btn, lv_spinbox_decrement_event_cb, LV_EVENT_ALL, spinboxValue);
+
+    btn = lv_btn_create(scr);
+    lv_obj_set_user_data(btn, this);
+    lv_obj_set_width(btn, lv_pct(100));
+    lv_obj_add_event_cb(btn, handleBackButtonClicked, LV_EVENT_CLICKED, btn);
+    label = lv_label_create(btn);
+    lv_label_set_text_static(label, MENU_BTN_BACK);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(btn, LV_ALIGN_BOTTOM_MID, 0, 0);
+
+    screenStack.push_back(scr); // Save the new screen on the stack
+    lv_screen_load(scr);        // Activate the new screen
+    lvgl_port_unlock();
+}
+
 void UserSettings::exitSettings() {
     if (!lvgl_port_lock(0)) {
         return;
@@ -700,6 +793,17 @@ static void handleDebugButtonClicked(lv_event_t *e) {
     settings = (UserSettings *)lv_obj_get_user_data((lv_obj_t *)lv_event_get_target(e));
     lvgl_port_unlock();
 
+    const char *buttonNames[] = {
+        MENU_BTN_EXP_SMOOTHING,
+        MENU_BTN_1EU_BETA,
+        MENU_BTN_NAME_DEBOUNCING,
+    };
+    lv_event_cb_t callbackFunctions[] = {
+        handleExpSmoothingButtonClicked,
+        handle1EUBetaButtonClicked,
+        handleNameDebouncingButtonClicked,
+    };
+    settings->createMenu(buttonNames, callbackFunctions, 3);
 }
 
 static void handleExpSmoothingButtonClicked(lv_event_t *e) {
@@ -709,7 +813,7 @@ static void handleExpSmoothingButtonClicked(lv_event_t *e) {
     }
     settings = (UserSettings *)lv_obj_get_user_data((lv_obj_t *)lv_event_get_target(e));
     lvgl_port_unlock();
-
+    settings->createSpinbox(MENU_BTN_EXP_SMOOTHING, 0, 100, 3, 1, &settings->expSmoothing);
 }
 
 static void handle1EUBetaButtonClicked(lv_event_t *e) {
@@ -773,4 +877,3 @@ static void handleBackButtonClicked(lv_event_t *e) {
     settings->saveSettings(); // TODO: Figure out a better way of doing this than saving every time
     settings->removeCurrentMenu();
 }
-

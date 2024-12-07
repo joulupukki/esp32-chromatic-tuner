@@ -129,10 +129,6 @@ lv_obj_t *main_screen = NULL;
 #define EU_FILTER_MIN_CUTOFF            0.5
 #define EU_FILTER_DERIVATIVE_CUTOFF     1
 
-// Exponential Smoother (not currently used)
-//#define SMOOTHING_AMOUNT                0.25 // should be a value between 0.0 and 1.0
-#define SMOOTHING_AMOUNT                0.10 // should be a value between 0.0 and 1.0
-
 #define A4_FREQ                         440.0
 #define CENTS_PER_SEMITONE              100
 
@@ -154,7 +150,7 @@ static adc_channel_t channel[1] = {ADC_CHANNEL_7}; // ESP32-CYD - GPIO 35 (ADC1_
 static TaskHandle_t s_task_handle;
 static const char *TAG = "TUNER";
 
-ExponentialSmoother smoother(SMOOTHING_AMOUNT);
+ExponentialSmoother smoother(0.1); // This is replaced by a user setting
 float current_frequency = -1.0f;
 
 // 1EU Filter Initialization Params
@@ -662,8 +658,6 @@ static void readAndDetectTask(void *pvParameter) {
     ESP_ERROR_CHECK(adc_continuous_register_event_callbacks(handle, &cbs, NULL));
     ESP_ERROR_CHECK(adc_continuous_start(handle));
 
-    oneEUFilter.setBeta(userSettings->oneEUBeta);
-
     // adc_ll_digi_set_convert_limit_num(2); // potential hack for the ESP32 ADC bug
 
     while (1) {
@@ -677,11 +671,21 @@ static void readAndDetectTask(void *pvParameter) {
          */
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
+        bool hasConsumedUserSettings = false; // Use this so we don't make unnecessary calls in the loop
+
         while (1) {
             if (userSettings == NULL || userSettings->isShowingMenu) {
                 // Don't read the signal when the settings menu is showing.
+                hasConsumedUserSettings = false;
                 vTaskDelay(pdMS_TO_TICKS(500));
                 continue;
+            }
+
+            if (!hasConsumedUserSettings) {
+                // Set these values as they may have changed in the user settings menu.
+                oneEUFilter.setBeta(userSettings->oneEUBeta);
+                smoother.setAmount(userSettings->expSmoothing);
+                hasConsumedUserSettings = true;
             }
 
             std::vector<float> in(TUNER_ADC_FRAME_SIZE); // a vector of values to pass into qlib

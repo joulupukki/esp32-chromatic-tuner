@@ -26,6 +26,11 @@ public:
         return newValue;
     }
 
+    void setAmount(float newAmount) {
+        amount = std::min(amount, 1.0f);
+        amount = std::max(amount, 0.0f);
+    }
+
     void reset() {
         (void)values.empty();
     }
