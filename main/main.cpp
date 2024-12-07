@@ -33,9 +33,6 @@
 #include "lvgl.h"
 #include "esp_lvgl_port.h"
 
-#include "nvs_flash.h"
-#include "nvs.h"
-
 extern "C" { // because these files are C and not C++
     #include "lcd.h"
     #include "touch.h"
@@ -77,13 +74,6 @@ float           user_1eu_beta               = 0.007f;
 long int        user_note_debounce_interval = 110; // In milliseconds
 long int        user_display_brightness     = 0.75;
 
-// NVS Handle
-nvs_handle_t    nvs_settings_handle;
-
-// Function Prototypes for Settings
-void save_settings_to_nvs();
-void load_settings_from_nvs();
-
 UserSettings *userSettings = NULL;
 bool is_ui_initialized = false;
 
@@ -105,18 +95,17 @@ lv_obj_t *main_screen = NULL;
 #define TUNER_ADC_UNIT_STR(unit)          _TUNER_ADC_UNIT_STR(unit)
 #define TUNER_ADC_CONV_MODE               ADC_CONV_SINGLE_UNIT_1
 #define TUNER_ADC_ATTEN                   ADC_ATTEN_DB_12
-// #define TUNER_ADC_BIT_WIDTH               SOC_ADC_DIGI_MAX_BITWIDTH
 #define TUNER_ADC_BIT_WIDTH               12
 
-#if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S2
+// #if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S2
 #define TUNER_ADC_OUTPUT_TYPE             ADC_DIGI_OUTPUT_FORMAT_TYPE1
 #define TUNER_ADC_GET_CHANNEL(p_data)     ((p_data)->type1.channel)
 #define TUNER_ADC_GET_DATA(p_data)        ((p_data)->type1.data)
-#else
-#define TUNER_ADC_OUTPUT_TYPE             ADC_DIGI_OUTPUT_FORMAT_TYPE2
-#define TUNER_ADC_GET_CHANNEL(p_data)     ((p_data)->type2.channel)
-#define TUNER_ADC_GET_DATA(p_data)        ((p_data)->type2.data)
-#endif
+// #else
+// #define TUNER_ADC_OUTPUT_TYPE             ADC_DIGI_OUTPUT_FORMAT_TYPE2
+// #define TUNER_ADC_GET_CHANNEL(p_data)     ((p_data)->type2.channel)
+// #define TUNER_ADC_GET_DATA(p_data)        ((p_data)->type2.data)
+// #endif
 
 // CYD @ 48kHz
 #define TUNER_ADC_FRAME_SIZE            1024
@@ -140,7 +129,7 @@ lv_obj_t *main_screen = NULL;
 // the frequency. This should help cut down on the noise from the
 // OLED and only attempt to read frequency information when an
 // actual input signal is being read.
-#define TUNER_READING_DIFF_MINIMUM      400
+#define TUNER_READING_DIFF_MINIMUM      400 // TODO: Convert this into a debug setting
 
 //
 // Smoothing
@@ -149,8 +138,6 @@ lv_obj_t *main_screen = NULL;
 // 1EU Filter
 #define EU_FILTER_ESTIMATED_FREQ        48000 // Same as https://github.com/bkshepherd/DaisySeedProjects/blob/main/Software/GuitarPedal/Util/frequency_detector_q.h
 #define EU_FILTER_MIN_CUTOFF            0.5
-// #define EU_FILTER_BETA                  0.007
-#define EU_FILTER_BETA                  0.05 // Same as https://github.com/bkshepherd/DaisySeedProjects/blob/main/Software/GuitarPedal/Util/frequency_detector_q.h
 #define EU_FILTER_DERIVATIVE_CUTOFF     1
 
 // Exponential Smoother (not currently used)
@@ -186,10 +173,9 @@ float current_frequency = -1.0f;
 // 1EU Filter Initialization Params
 static const double euFilterFreq = EU_FILTER_ESTIMATED_FREQ; // I believe this means no guess as to what the incoming frequency will initially be
 static const double mincutoff = EU_FILTER_MIN_CUTOFF;
-static const double beta = EU_FILTER_BETA;
 static const double dcutoff = EU_FILTER_DERIVATIVE_CUTOFF;
 
-OneEuroFilter oneEUFilter(euFilterFreq, mincutoff, beta, dcutoff) ;
+OneEuroFilter oneEUFilter(euFilterFreq, mincutoff, 0.05, dcutoff); // TODO: Use the default beta instead of hard-coded one
 
 static lv_obj_t *note_name_label;
 lv_style_t note_name_label_style;
@@ -519,42 +505,31 @@ static void continuous_adc_init(adc_channel_t *channel, uint8_t channel_count, a
 }
 
 static esp_err_t app_lvgl_main() {
-    // ESP_LOGI("LOCK", "locking in app_lvgl_main");
+    ESP_LOGI("LOCK", "locking in app_lvgl_main");
     lvgl_port_lock(0);
-    // ESP_LOGI("LOCK", "locked in app_lvgl_main");
+    ESP_LOGI("LOCK", "locked in app_lvgl_main");
 
     lv_obj_t *scr = lv_scr_act();
-    // ESP_LOGI("LOCK", "A");
     screen_width = lv_obj_get_width(scr);
-    // ESP_LOGI("LOCK", "B");
     screen_height = lv_obj_get_height(scr);
-    // ESP_LOGI("LOCK", "C");
     lv_obj_set_style_bg_color(scr, lv_color_hex(0x000000), LV_PART_MAIN);
-    // ESP_LOGI("LOCK", "D");
     lv_obj_set_scrollbar_mode(scr, LV_SCROLLBAR_MODE_OFF);
-    // ESP_LOGI("LOCK", "E");
     create_ruler(scr);
-    // ESP_LOGI("LOCK", "F");
     create_labels(scr);
-    // ESP_LOGI("LOCK", "G");
     create_settings_menu_button(scr);
-    // ESP_LOGI("LOCK", "H");
     main_screen = scr;
-    // ESP_LOGI("LOCK", "I");
 
     // Create a new timer that will fire. This will
     // debounce the calls to the UI to update the note name.
     note_name_update_timer = lv_timer_create(set_note_name_cb, NOTE_NAME_UPDATE_TIMER_INTERVAL, NULL);
-    // ESP_LOGI("LOCK", "J");
     lv_timer_pause(note_name_update_timer);
-    // ESP_LOGI("LOCK", "K");
     lv_timer_reset(note_name_update_timer);
 
     ESP_LOGI("LOCK", "unlocking in app_lvgl_main");
     lvgl_port_unlock();
     ESP_LOGI("LOCK", "unlocked in app_lvgl_main");
 
-    userSettings = new UserSettings(lvgl_display, main_screen);
+    userSettings->setDisplayAndScreen(lvgl_display, main_screen);
 
     return ESP_OK;
 }
@@ -562,9 +537,7 @@ static esp_err_t app_lvgl_main() {
 extern "C" void app_main() {
 
     // Initialize NVS (Persistent Flash Storage for User Settings)
-    nvs_flash_init();
-    nvs_open("settings", NVS_READWRITE, &nvs_settings_handle);
-    load_settings_from_nvs();
+    userSettings = new UserSettings();
 
     // Start the Display Task
     xTaskCreatePinnedToCore(
@@ -597,15 +570,11 @@ static void oledTask(void *pvParameter) {
     esp_lcd_panel_handle_t lcd_panel;
     esp_lcd_touch_handle_t tp;
     lvgl_port_touch_cfg_t touch_cfg;
-// ESP_LOGI("BHT", "a");
 
     ESP_ERROR_CHECK(lcd_display_brightness_init());
-// ESP_LOGI("BHT", "b");
 
     ESP_ERROR_CHECK(app_lcd_init(&lcd_io, &lcd_panel));
-// ESP_LOGI("BHT", "c");
     lvgl_display = app_lvgl_init(lcd_io, lcd_panel);
-// ESP_LOGI("BHT", "d");
     if (lvgl_display == NULL)
     {
         ESP_LOGI(TAG, "fatal error in app_lvgl_init");
@@ -613,22 +582,18 @@ static void oledTask(void *pvParameter) {
     }
 
     ESP_ERROR_CHECK(touch_init(&tp));
-// ESP_LOGI("BHT", "e");
     touch_cfg.disp = lvgl_display;
     touch_cfg.handle = tp;
     lvgl_port_add_touch(&touch_cfg);
 
     if (lvgl_port_lock(0)) {
         ESP_ERROR_CHECK(lcd_display_brightness_set(75));
-// ESP_LOGI("BHT", "f");
-        ESP_ERROR_CHECK(lcd_display_rotate(lvgl_display, LV_DISPLAY_ROTATION_90));
-// ESP_LOGI("BHT", "g");
+        ESP_ERROR_CHECK(lcd_display_rotate(lvgl_display, userSettings->getDisplayOrientation()));
         // ESP_ERROR_CHECK(lcd_display_rotate(lvgl_display, LV_DISPLAY_ROTATION_0)); // Upside Down
         lvgl_port_unlock();
     }
 
     ESP_ERROR_CHECK(app_lvgl_main());
-// ESP_LOGI("BHT", "i");
 
     float cents;
 
@@ -709,6 +674,8 @@ static void readAndDetectTask(void *pvParameter) {
     };
     ESP_ERROR_CHECK(adc_continuous_register_event_callbacks(handle, &cbs, NULL));
     ESP_ERROR_CHECK(adc_continuous_start(handle));
+
+    oneEUFilter.setBeta(userSettings->oneEUBeta);
 
     // adc_ll_digi_set_convert_limit_num(2); // potential hack for the ESP32 ADC bug
 
@@ -857,34 +824,4 @@ static void readAndDetectTask(void *pvParameter) {
 
     ESP_ERROR_CHECK(adc_continuous_stop(handle));
     ESP_ERROR_CHECK(adc_continuous_deinit(handle));
-}
-
-// NVS User Settings
-
-void save_settings_to_nvs() {
-    nvs_set_i32(nvs_settings_handle, "in_tune_width", user_in_tune_cents_width);
-    // nvs_set_f32(nvs_settings_handle, "display_brightness", user_display_brightness);
-    // nvs_set_u32(nvs_settings_handle, "note_name_color", user_note_name_color.full);
-    // nvs_set_u32(nvs_settings_handle, "indicator_color", user_pitch_indicator_color.full);
-    nvs_set_i32(nvs_settings_handle, "indicator_width", user_pitch_indicator_width);
-    nvs_set_i32(nvs_settings_handle, "rotation_mode", user_rotation_mode);
-    // nvs_set_f32(nvs_settings_handle, "exp_smoothing", user_exp_smoothing);
-    // nvs_set_f32(nvs_settings_handle, "1eu_beta", user_1eu_beta);
-    nvs_set_i32(nvs_settings_handle, "debounce_interval", user_note_debounce_interval);
-    nvs_commit(nvs_settings_handle);
-}
-
-void load_settings_from_nvs() {
-    nvs_get_i32(nvs_settings_handle, "in_tune_width", &user_in_tune_cents_width);
-    // nvs_get_f32(nvs_settings_handle, "display_brightness", &user_display_brightness);
-    // uint32_t temp_color;
-    // nvs_get_u32(nvs_settings_handle, "note_name_color", &temp_color);
-    // user_note_name_color.full = temp_color;
-    // nvs_get_u32(nvs_settings_handle, "indicator_color", &temp_color);
-    // user_pitch_indicator_color.full = temp_color;
-    nvs_get_i32(nvs_settings_handle, "indicator_width", &user_pitch_indicator_width);
-    nvs_get_i32(nvs_settings_handle, "rotation_mode", &user_rotation_mode);
-    // nvs_get_f32(nvs_settings_handle, "exp_smoothing", &user_exp_smoothing);
-    // nvs_get_f32(nvs_settings_handle, "1eu_beta", &user_1eu_beta);
-    nvs_get_i32(nvs_settings_handle, "debounce_interval", &user_note_debounce_interval);
 }

@@ -12,7 +12,6 @@
 #define MENU_BTN_DISPLAY            "Display"
     #define MENU_BTN_BRIGHTNESS         "Brightness"
     #define MENU_BTN_NOTE_COLOR         "Note Color"
-    #define MENU_BTN_INDICATOR_COLOR    "Indicator Color"
     #define MENU_BTN_ROTATION           "Rotation"
         #define MENU_BTN_ROTATION_NORMAL    "Normal"
         #define MENU_BTN_ROTATION_LEFT      "Left"
@@ -31,6 +30,15 @@
 #define MENU_BTN_BACK               "Back"
 #define MENU_BTN_EXIT               "Exit"
 
+// Setting keys in NVS can only be up to 15 chars max
+#define SETTING_KEY_IN_TUNE_WIDTH           "in_tune_width"
+#define SETTING_KEY_NOTE_NAME_PALETTE       "note_nm_palette"
+#define SETTING_KEY_DISPLAY_ORIENTATION     "display_orient"
+#define SETTING_KEY_EXP_SMOOTHING           "exp_smoothing"
+#define SETTING_KEY_ONE_EU_BETA             "one_eu_beta"
+#define SETTING_KEY_NOTE_DEBOUNCE_INTERVAL  "note_debounce"
+#define SETTING_KEY_DISPLAY_BRIGHTNESS      "disp_brightness"
+
 /*
 
 SETTINGS
@@ -44,10 +52,6 @@ SETTINGS
             Show a slider and show values between 10 and 100. Save to a setting named "user_display_brightness" as a float value between 0.1 and 1.0
         Note Color
             Show a color picker and save setting to a variable named "user_note_name_color"
-        Indicator Color
-            Show a color picker and save the estting into a variable named "user_pitch_indicator_color"
-        Indicator Width
-            Show a slider with integer values between 4 and 20. Save the setting into "user_pitch_indicator_width"
         Rotation
             Allow the user to choose between: Normal, Upside Down, Left, or Right. Save the setting into "user_rotation_mode"
         Back - returns to the main menu
@@ -72,8 +76,97 @@ SETTINGS
 //
 // PRIVATE Methods
 //
-void UserSettings::saveSettings() {
 
+void UserSettings::loadSettings() {
+    nvs_flash_init();
+    nvs_open("settings", NVS_READWRITE, &nvsHandle);
+
+    uint8_t value;
+
+    if (nvs_get_u8(nvsHandle, SETTING_KEY_IN_TUNE_WIDTH, &value) == ESP_OK) {
+        inTuneCentsWidth = value;
+    } else {
+        inTuneCentsWidth = DEFAULT_IN_TUNE_CENTS_WIDTH;
+    }
+
+    if (nvs_get_u8(nvsHandle, SETTING_KEY_NOTE_NAME_PALETTE, &value) == ESP_OK) {
+        noteNamePalette = (lv_palette_t)value;
+    } else {
+        noteNamePalette = DEFAULT_NOTE_NAME_PALETTE;
+    }
+
+    if (nvs_get_u8(nvsHandle, SETTING_KEY_DISPLAY_ORIENTATION, &value) == ESP_OK) {
+        displayOrientation = (TunerOrientation)value;
+    } else {
+        displayOrientation = DEFAULT_DISPLAY_ORIENTATION;
+    }
+    ESP_LOGI("Settings", "Loaded display orientation of: %d", displayOrientation);
+
+    if (nvs_get_u8(nvsHandle, SETTING_KEY_EXP_SMOOTHING, &value) == ESP_OK) {
+        expSmoothing = ((float)value) * 0.01;
+    } else {
+        expSmoothing = DEFAULT_EXP_SMOOTHING;
+    }
+
+    if (nvs_get_u8(nvsHandle, SETTING_KEY_ONE_EU_BETA, &value) == ESP_OK) {
+        oneEUBeta = ((float)value) * 0.001;
+    } else {
+        oneEUBeta = DEFAULT_ONE_EU_BETA;
+    }
+
+    if (nvs_get_u8(nvsHandle, SETTING_KEY_NOTE_DEBOUNCE_INTERVAL, &value) == ESP_OK) {
+        noteDebounceInterval = value;
+    } else {
+        noteDebounceInterval = DEFAULT_NOTE_DEBOUNCE_INTERVAL;
+    }
+
+    if (nvs_get_u8(nvsHandle, SETTING_KEY_DISPLAY_BRIGHTNESS, &value) == ESP_OK) {
+        displayBrightness = ((float)value) * 0.01;
+    } else {
+        displayBrightness = DEFAULT_DISPLAY_BRIGHTNESS;
+    }
+}
+
+void UserSettings::saveSettings() {
+    uint8_t value;
+
+    value = inTuneCentsWidth;
+    nvs_set_u8(nvsHandle, SETTING_KEY_IN_TUNE_WIDTH, value);
+
+    value = (uint8_t)noteNamePalette;
+    nvs_set_u8(nvsHandle, SETTING_KEY_NOTE_NAME_PALETTE, value);
+
+    value = (uint8_t)displayOrientation;
+    nvs_set_u8(nvsHandle, SETTING_KEY_DISPLAY_ORIENTATION, value);
+
+    value = (uint8_t)(expSmoothing * 100);
+    nvs_set_u8(nvsHandle, SETTING_KEY_EXP_SMOOTHING, value);
+
+    value = (uint8_t)(oneEUBeta * 1000);
+    nvs_set_u8(nvsHandle, SETTING_KEY_ONE_EU_BETA, value);
+
+    value = (uint8_t)noteDebounceInterval;
+    nvs_set_u8(nvsHandle, SETTING_KEY_NOTE_DEBOUNCE_INTERVAL, value);
+
+    value = (uint8_t)(displayBrightness * 100);
+    nvs_set_u8(nvsHandle, SETTING_KEY_DISPLAY_BRIGHTNESS, value);
+
+    nvs_commit(nvsHandle);
+}
+
+void UserSettings::restoreDefaultSettings() {
+    inTuneCentsWidth = DEFAULT_IN_TUNE_CENTS_WIDTH;
+    noteNamePalette = DEFAULT_NOTE_NAME_PALETTE;
+    displayOrientation = DEFAULT_DISPLAY_ORIENTATION;
+    expSmoothing = DEFAULT_EXP_SMOOTHING;
+    oneEUBeta = DEFAULT_ONE_EU_BETA;
+    noteDebounceInterval = DEFAULT_NOTE_DEBOUNCE_INTERVAL;
+    displayBrightness = DEFAULT_DISPLAY_BRIGHTNESS;
+
+    saveSettings();
+
+    // Reboot!
+    esp_restart();
 }
 
 void UserSettings::showTunerMenu() {
@@ -100,9 +193,26 @@ void UserSettings::showAboutMenu() {
 // PUBLIC Methods
 //
 
-UserSettings::UserSettings(lv_display_t *display, lv_obj_t * mainScreen) {
+UserSettings::UserSettings() {
+    loadSettings();
+}
+
+lv_display_rotation_t UserSettings::getDisplayOrientation() {
+    switch (this->displayOrientation) {
+        case orientationNormal:
+            return LV_DISPLAY_ROTATION_180;
+        case orientationLeft:
+            return LV_DISPLAY_ROTATION_90;
+        case orientationRight:
+            return LV_DISPLAY_ROTATION_270;
+        default:
+            return LV_DISPLAY_ROTATION_0;
+    }
+}
+
+void UserSettings::setDisplayAndScreen(lv_display_t *display, lv_obj_t *screen) {
     lvglDisplay = display;
-    screenStack.push_back(mainScreen); // Add the main screen so we can load this when exiting the menu
+    screenStack.push_back(screen);
 }
 
 void UserSettings::showSettings() {
@@ -244,7 +354,9 @@ void UserSettings::rotateScreenTo(TunerOrientation newRotation) {
     if (lv_display_get_rotation(lvglDisplay) != new_rotation) {
         ESP_ERROR_CHECK(lcd_display_rotate(lvglDisplay, new_rotation));
 
-        // TODO: Save this off into user preferences.
+        // Save this off into user preferences.
+        this->displayOrientation = newRotation;
+        this->saveSettings();
     }
 
     lvgl_port_unlock();
@@ -279,16 +391,14 @@ static void handleDisplayButtonClicked(lv_event_t *e) {
     const char *buttonNames[] = {
         MENU_BTN_BRIGHTNESS,
         MENU_BTN_NOTE_COLOR,
-        MENU_BTN_INDICATOR_COLOR,
         MENU_BTN_ROTATION,
     };
     lv_event_cb_t callbackFunctions[] = {
         handleBrightnessButtonClicked,
         handleNoteColorButtonClicked,
-        handleIndicatorButtonClicked,
         handleRotationButtonClicked,
     };
-    settings->createMenu(buttonNames, callbackFunctions, 4);
+    settings->createMenu(buttonNames, callbackFunctions, 3);
 }
 
 static void handleBrightnessButtonClicked(lv_event_t *e) {
@@ -297,11 +407,6 @@ static void handleBrightnessButtonClicked(lv_event_t *e) {
 }
 
 static void handleNoteColorButtonClicked(lv_event_t *e) {
-    UserSettings *settings = (UserSettings *)lv_obj_get_user_data((lv_obj_t *)lv_event_get_target(e));
-
-}
-
-static void handleIndicatorButtonClicked(lv_event_t *e) {
     UserSettings *settings = (UserSettings *)lv_obj_get_user_data((lv_obj_t *)lv_event_get_target(e));
 
 }

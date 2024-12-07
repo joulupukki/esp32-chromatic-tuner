@@ -17,7 +17,18 @@ extern "C" { // because these files are C and not C++
     #include "lcd.h"
 }
 
-enum TunerOrientation: std::uint8_t {
+#include "nvs_flash.h"
+#include "nvs.h"
+
+#define DEFAULT_IN_TUNE_CENTS_WIDTH     ((uint8_t) 2)
+#define DEFAULT_NOTE_NAME_PALETTE       ((lv_palette_t) LV_PALETTE_NONE)
+#define DEFAULT_DISPLAY_ORIENTATION     ((TunerOrientation) orientationNormal);
+#define DEFAULT_EXP_SMOOTHING           ((float) 0.15)
+#define DEFAULT_ONE_EU_BETA             ((float) 0.05)
+#define DEFAULT_NOTE_DEBOUNCE_INTERVAL  ((uint8_t) 110)
+#define DEFAULT_DISPLAY_BRIGHTNESS      ((float) 0.75)
+
+enum TunerOrientation: uint8_t {
     orientationNormal,
     orientationLeft,
     orientationRight,
@@ -38,18 +49,19 @@ class UserSettings {
     std::vector<lv_obj_t*> screenStack;
     lv_display_t *lvglDisplay;
 
-    // User Setting Variables
-    uint8_t             user_in_tune_cents_width    = 2;
-    lv_palette_t        user_note_name_color        = LV_PALETTE_NONE; // white. Use lv_color_t c = lv_palette_main(LV_PALETTE_...) to get a color in LVGL. In the case of white, use lv_color_white()
-    lv_palette_t        user_pitch_indicator_color  = LV_PALETTE_RED;
-    uint8_t             user_pitch_indicator_width  = 8;
-    TunerOrientation    user_display_orientation    = orientationNormal;
-    uint8_t             user_exp_smoothing          = 0.15f;
-    uint8_t             user_1eu_beta               = 0.007f;
-    uint8_t             user_note_debounce_interval = 110; // In milliseconds
-    uint8_t             user_display_brightness     = 0.75;
+    nvs_handle_t    nvsHandle;
 
+    /**
+     * @brief Loads settings from persistent storage.
+     */
+    void loadSettings();
+
+    /**
+     * @brief Saves settings to persistent storage.
+     */
     void saveSettings();
+
+    void restoreDefaultSettings();
 
     void showTunerMenu();
     void showDisplayMenu();
@@ -58,11 +70,32 @@ class UserSettings {
 public:
     bool isShowingMenu = false;
 
+    // User Setting Variables
+    uint8_t             inTuneCentsWidth        = DEFAULT_IN_TUNE_CENTS_WIDTH;    // 2,                     Range 1 - 8
+    lv_palette_t        noteNamePalette         = DEFAULT_NOTE_NAME_PALETTE; // white. Use lv_color_t c = lv_palette_main(LV_PALETTE_...) to get a color in LVGL. In the case of white, use lv_color_white()
+    TunerOrientation    displayOrientation      = DEFAULT_DISPLAY_ORIENTATION;
+    float               expSmoothing            = DEFAULT_EXP_SMOOTHING;   // 15 * .01 = 0.15,              Range: 0 - 100
+    float               oneEUBeta               = DEFAULT_ONE_EU_BETA;   // 50 * .001 = 0.05,               Range: 0 - 1000
+    uint8_t             noteDebounceInterval    = DEFAULT_NOTE_DEBOUNCE_INTERVAL;  // In milliseconds,      Range: 100 - 500
+    float               displayBrightness       = DEFAULT_DISPLAY_BRIGHTNESS;   // 75 * .01 = 0.75,         Range: 10 - 100
+
     /**
      * @brief Create the settings object and sets its parameters
      * @param mainScreen The LVGL main screen in the app.
      */
-    UserSettings(lv_display_t *display, lv_obj_t * mainScreen);
+    UserSettings();
+
+    /**
+     * @brief Get the user setting for display orientation.
+     */
+    lv_display_rotation_t getDisplayOrientation();
+
+    /**
+     * @brief Gives UserSettings a handle to the main display and the main screen.
+     * @param display Handle to the main display. Used for screen rotation.
+     * @param screen Handle to the main screen. Used to close the settings menu.
+     */
+    void setDisplayAndScreen(lv_display_t *display, lv_obj_t *screen);
 
     /**
      * @brief Pause tuning or standby mode and show the settings menu/screen.
