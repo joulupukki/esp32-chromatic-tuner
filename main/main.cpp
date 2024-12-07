@@ -12,6 +12,8 @@
 #include "exponential_smoother.hpp"
 #include "OneEuroFilter.h"
 
+#include "UserSettings.h"
+
 //
 // Q DSP Library for Pitch Detection
 //
@@ -31,76 +33,48 @@
 #include "lvgl.h"
 #include "esp_lvgl_port.h"
 
-#include "nvs_flash.h"
-#include "nvs.h"
-
 extern "C" { // because these files are C and not C++
     #include "lcd.h"
     #include "touch.h"
 }
 
 extern "C" const lv_font_t raleway_128;
+extern "C" const lv_font_t fontawesome_48;
 
+#define GEAR_SYMBOL "\xEF\x80\x93"
 
 namespace q = cycfi::q;
 using namespace q::literals;
 using std::fixed;
 
-//
-// User Settings Menu
-//
+/* GPIO PINS
 
-/*
+P3:
+GND - Not used
+GPIO 35 (ADC1_CH7) - Input of the amplified guitar signal here
+GPIO 22 - Control signal to the non-latching relay
+GPIO 21 - This is not available since it's always ON when the LCD backlight is on
 
-SETTINGS
-    Tuning
-        In Tune Width
-            Show a slider and allow the user to choose integer values between 1 and 10. Save the setting into "user_in_tune_cents_width"
-        Back - returns to the main menu
+CN1:
+GND - Not used
+GPIO 22 - Same as P3
+GPIO 27 - Momentary foot switch input
+3V3 - Not used
 
-    Display Settings
-        Brightness
-            Show a slider and show values between 10 and 100. Save to a setting named "user_display_brightness" as a float value between 0.1 and 1.0
-        Note Color
-            Show a color picker and save setting to a variable named "user_note_name_color"
-        Indicator Color
-            Show a color picker and save the estting into a variable named "user_pitch_indicator_color"
-        Indicator Width
-            Show a slider with integer values between 4 and 20. Save the setting into "user_pitch_indicator_width"
-        Rotation
-            Allow the user to choose between: Normal, Upside Down, Left, or Right. Save the setting into "user_rotation_mode"
-        Back - returns to the main menu
-
-    Debug
-        Exp Smoothing
-            Allow the user to use a slider to choose a float value between 0.0 and 1.0. Show only 1 decimal after the decimal point. Save the setting into "user_exp_smoothing"
-        1EU Beta
-            Allow the user to use a slider to choose a float value between 0.000 and 2.000 allowing up to 3 decimal places of granularity. Save the setting into "user_1eu_beta"
-        Note Debouncing
-            Allow the user to use a slider to choose an integer value between 100 and 400. Save this setting into "user_note_debounce_interval"
-        Back - returns to the main menu
-        
-    Save & Exit -> Selecting this menu exits the settings menu
 */
 
-// Variables to store settings
-long int        user_in_tune_cents_width    = 2;
-lv_color_t      user_note_name_color        = lv_color_hex(0xFFFFFF);
-lv_color_t      user_pitch_indicator_color  = lv_color_hex(0xFF0000);
-long int        user_pitch_indicator_width  = 8;
-long int        user_rotation_mode          = 0; // 0: Normal, 1: Upside Down, 2: Left, 3: Right
-float           user_exp_smoothing          = 0.15f;
-float           user_1eu_beta               = 0.007f;
-long int        user_note_debounce_interval = 110; // In milliseconds
-long int        user_display_brightness     = 0.75;
+UserSettings *userSettings = NULL;
+bool is_ui_initialized = false;
 
-// NVS Handle
-nvs_handle_t    nvs_settings_handle;
+typedef enum {
+    SCREEN_STANDBY = 0,
+    SCREEN_TUNING,
+    SCREEN_MENU_TOP,
+    SCREEN_MENU_TUNING,
+} tuner_screen_t;
 
-// Function Prototypes for Settings
-void save_settings_to_nvs();
-void load_settings_from_nvs();
-void create_main_menu(lv_obj_t *parent);
+tuner_screen_t current_screen = SCREEN_STANDBY;
+lv_obj_t *main_screen = NULL;
 
 //
 // ADC-Related
@@ -110,18 +84,17 @@ void create_main_menu(lv_obj_t *parent);
 #define TUNER_ADC_UNIT_STR(unit)          _TUNER_ADC_UNIT_STR(unit)
 #define TUNER_ADC_CONV_MODE               ADC_CONV_SINGLE_UNIT_1
 #define TUNER_ADC_ATTEN                   ADC_ATTEN_DB_12
-// #define TUNER_ADC_BIT_WIDTH               SOC_ADC_DIGI_MAX_BITWIDTH
 #define TUNER_ADC_BIT_WIDTH               12
 
-#if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S2
+// #if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S2
 #define TUNER_ADC_OUTPUT_TYPE             ADC_DIGI_OUTPUT_FORMAT_TYPE1
 #define TUNER_ADC_GET_CHANNEL(p_data)     ((p_data)->type1.channel)
 #define TUNER_ADC_GET_DATA(p_data)        ((p_data)->type1.data)
-#else
-#define TUNER_ADC_OUTPUT_TYPE             ADC_DIGI_OUTPUT_FORMAT_TYPE2
-#define TUNER_ADC_GET_CHANNEL(p_data)     ((p_data)->type2.channel)
-#define TUNER_ADC_GET_DATA(p_data)        ((p_data)->type2.data)
-#endif
+// #else
+// #define TUNER_ADC_OUTPUT_TYPE             ADC_DIGI_OUTPUT_FORMAT_TYPE2
+// #define TUNER_ADC_GET_CHANNEL(p_data)     ((p_data)->type2.channel)
+// #define TUNER_ADC_GET_DATA(p_data)        ((p_data)->type2.data)
+// #endif
 
 // CYD @ 48kHz
 #define TUNER_ADC_FRAME_SIZE            1024
@@ -145,7 +118,7 @@ void create_main_menu(lv_obj_t *parent);
 // the frequency. This should help cut down on the noise from the
 // OLED and only attempt to read frequency information when an
 // actual input signal is being read.
-#define TUNER_READING_DIFF_MINIMUM      400
+#define TUNER_READING_DIFF_MINIMUM      400 // TODO: Convert this into a debug setting
 
 //
 // Smoothing
@@ -154,8 +127,6 @@ void create_main_menu(lv_obj_t *parent);
 // 1EU Filter
 #define EU_FILTER_ESTIMATED_FREQ        48000 // Same as https://github.com/bkshepherd/DaisySeedProjects/blob/main/Software/GuitarPedal/Util/frequency_detector_q.h
 #define EU_FILTER_MIN_CUTOFF            0.5
-// #define EU_FILTER_BETA                  0.007
-#define EU_FILTER_BETA                  0.05 // Same as https://github.com/bkshepherd/DaisySeedProjects/blob/main/Software/GuitarPedal/Util/frequency_detector_q.h
 #define EU_FILTER_DERIVATIVE_CUTOFF     1
 
 // Exponential Smoother (not currently used)
@@ -166,8 +137,6 @@ void create_main_menu(lv_obj_t *parent);
 #define CENTS_PER_SEMITONE              100
 
 #define INDICATOR_SEGMENTS              100 // num of visual segments for showing tuning accuracy
-// #define IN_TUNE_CENTS_WIDTH             4 // num of cents around the 0 point considered as "in tune"
-#define IN_TUNE_CENTS_WIDTH             2 // num of cents around the 0 point considered as "in tune"
 #define PITCH_INDICATOR_BAR_WIDTH       8
 
 #define MAX_PITCH_NAME_LENGTH           4
@@ -179,7 +148,7 @@ using pitch = cycfi::q::pitch;
 CONSTEXPR frequency low_fs = cycfi::q::pitch_names::C[1];
 CONSTEXPR frequency high_fs = cycfi::q::pitch_names::C[7]; // Helps to catch the high harmonics
 
-static adc_channel_t channel[1] = {ADC_CHANNEL_7}; // ESP32-CYD
+static adc_channel_t channel[1] = {ADC_CHANNEL_7}; // ESP32-CYD - GPIO 35 (ADC1_CH7)
 // static adc_channel_t channel[1] = {ADC_CHANNEL_4}; // ESP32 - Heltec
 
 static TaskHandle_t s_task_handle;
@@ -191,10 +160,9 @@ float current_frequency = -1.0f;
 // 1EU Filter Initialization Params
 static const double euFilterFreq = EU_FILTER_ESTIMATED_FREQ; // I believe this means no guess as to what the incoming frequency will initially be
 static const double mincutoff = EU_FILTER_MIN_CUTOFF;
-static const double beta = EU_FILTER_BETA;
 static const double dcutoff = EU_FILTER_DERIVATIVE_CUTOFF;
 
-OneEuroFilter oneEUFilter(euFilterFreq, mincutoff, beta, dcutoff) ;
+OneEuroFilter oneEUFilter(euFilterFreq, mincutoff, 0.05, dcutoff); // TODO: Use the default beta instead of hard-coded one
 
 static lv_obj_t *note_name_label;
 lv_style_t note_name_label_style;
@@ -207,6 +175,7 @@ lv_style_t cents_label_style;
 lv_obj_t *pitch_indicator_bar;
 lv_coord_t screen_width = 0;
 lv_coord_t screen_height = 0;
+lv_display_t *lvgl_display = NULL;
 
 static void oledTask(void *pvParameter);
 static void readAndDetectTask(void *pvParameter);
@@ -286,6 +255,23 @@ void create_labels(lv_obj_t * parent) {
     lv_style_init(&frequency_label_style);
     lv_style_set_text_font(&frequency_label_style, &lv_font_montserrat_14);
     lv_obj_add_style(frequency_label, &frequency_label_style, 0);
+}
+
+void settings_button_cb(lv_event_t *e) {
+    ESP_LOGI(TAG, "Settings button clicked");
+    userSettings->showSettings();
+}
+
+void create_settings_menu_button(lv_obj_t * parent) {
+    lv_obj_t *scr = lv_scr_act();
+    lv_obj_t *btn = lv_btn_create(scr);
+    lv_obj_set_style_opa(btn, LV_OPA_40, 0);
+    lv_obj_remove_style_all(btn);
+    lv_obj_set_ext_click_area(btn, 100);
+    lv_obj_t *label = lv_label_create(btn);
+    lv_label_set_text(label, GEAR_SYMBOL);
+    lv_obj_add_event_cb(btn, settings_button_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_align(btn, LV_ALIGN_BOTTOM_LEFT, 20, -20);
 }
 
 void create_ruler(lv_obj_t * parent) {
@@ -388,6 +374,7 @@ char noteNameBuffer[MAX_PITCH_NAME_LENGTH];
 
 void set_note_name_cb(lv_timer_t * timer) {
     // The note name is in the timer's user data
+    ESP_LOGI("LOCK", "locking in set_note_name_cb");
     lvgl_port_lock(0);
     const char *note_string = (const char *)lv_timer_get_user_data(timer);
     memset(noteNameBuffer, '\0', MAX_PITCH_NAME_LENGTH);
@@ -395,7 +382,10 @@ void set_note_name_cb(lv_timer_t * timer) {
     lv_label_set_text_static(note_name_label, (const char *)noteNameBuffer);
 
     lv_timer_pause(timer);
+
+    ESP_LOGI("LOCK", "unlocking in set_note_name_cb");
     lvgl_port_unlock();
+    ESP_LOGI("LOCK", "unlocked in set_note_name_cb");
 }
 
 void update_note_name(const char *new_value) {
@@ -408,6 +398,7 @@ void update_note_name(const char *new_value) {
 }
 
 void display_pitch(float frequency, const char *noteName, float cents) {
+    return;
     if (noteName != NULL) {
         lv_label_set_text_fmt(frequency_label, "%.2f", frequency);
         lv_obj_clear_flag(frequency_label, LV_OBJ_FLAG_HIDDEN);
@@ -423,7 +414,7 @@ void display_pitch(float frequency, const char *noteName, float cents) {
         // auto cents_per_side = CENTS_PER_SEMITONE / 2;
         // lv_coord_t half_width = screen_width / 2;
 
-        if (abs(cents) <= IN_TUNE_CENTS_WIDTH / 2) {
+        if (abs(cents) <= userSettings->inTuneCentsWidth / 2) {
             // Show this as perfectly in tune
             indicator_x_pos = 0;
         } else {
@@ -500,9 +491,10 @@ static void continuous_adc_init(adc_channel_t *channel, uint8_t channel_count, a
     *out_handle = handle;
 }
 
-static esp_err_t app_lvgl_main()
-{
+static esp_err_t app_lvgl_main() {
+    ESP_LOGI("LOCK", "locking in app_lvgl_main");
     lvgl_port_lock(0);
+    ESP_LOGI("LOCK", "locked in app_lvgl_main");
 
     lv_obj_t *scr = lv_scr_act();
     screen_width = lv_obj_get_width(scr);
@@ -511,6 +503,8 @@ static esp_err_t app_lvgl_main()
     lv_obj_set_scrollbar_mode(scr, LV_SCROLLBAR_MODE_OFF);
     create_ruler(scr);
     create_labels(scr);
+    create_settings_menu_button(scr);
+    main_screen = scr;
 
     // Create a new timer that will fire. This will
     // debounce the calls to the UI to update the note name.
@@ -518,7 +512,11 @@ static esp_err_t app_lvgl_main()
     lv_timer_pause(note_name_update_timer);
     lv_timer_reset(note_name_update_timer);
 
+    ESP_LOGI("LOCK", "unlocking in app_lvgl_main");
     lvgl_port_unlock();
+    ESP_LOGI("LOCK", "unlocked in app_lvgl_main");
+
+    userSettings->setDisplayAndScreen(lvgl_display, main_screen);
 
     return ESP_OK;
 }
@@ -526,9 +524,7 @@ static esp_err_t app_lvgl_main()
 extern "C" void app_main() {
 
     // Initialize NVS (Persistent Flash Storage for User Settings)
-    nvs_flash_init();
-    nvs_open("settings", NVS_READWRITE, &nvs_settings_handle);
-    load_settings_from_nvs();
+    userSettings = new UserSettings();
 
     // Start the Display Task
     xTaskCreatePinnedToCore(
@@ -547,7 +543,7 @@ extern "C" void app_main() {
         "detect",           // debug name of the task
         4096,               // stack depth (no idea what this should be)
         NULL,               // params to pass to the callback function
-        10,                 // ux priority - higher value is higher priority
+        1,                  // ux priority - higher value is higher priority
         NULL,               // handle to the created task - we don't need it
         1                   // Core ID
     );
@@ -561,7 +557,6 @@ static void oledTask(void *pvParameter) {
     esp_lcd_panel_handle_t lcd_panel;
     esp_lcd_touch_handle_t tp;
     lvgl_port_touch_cfg_t touch_cfg;
-    lv_display_t *lvgl_display = NULL;
 
     ESP_ERROR_CHECK(lcd_display_brightness_init());
 
@@ -578,8 +573,13 @@ static void oledTask(void *pvParameter) {
     touch_cfg.handle = tp;
     lvgl_port_add_touch(&touch_cfg);
 
-    ESP_ERROR_CHECK(lcd_display_brightness_set(75));
-    ESP_ERROR_CHECK(lcd_display_rotate(lvgl_display, LV_DISPLAY_ROTATION_90));
+    if (lvgl_port_lock(0)) {
+        ESP_ERROR_CHECK(lcd_display_brightness_set(userSettings->displayBrightness * 100));
+        ESP_ERROR_CHECK(lcd_display_rotate(lvgl_display, userSettings->getDisplayOrientation()));
+        // ESP_ERROR_CHECK(lcd_display_rotate(lvgl_display, LV_DISPLAY_ROTATION_0)); // Upside Down
+        lvgl_port_unlock();
+    }
+
     ESP_ERROR_CHECK(app_lvgl_main());
 
     float cents;
@@ -588,7 +588,7 @@ static void oledTask(void *pvParameter) {
         lv_task_handler();
 
         // Lock the mutex due to the LVGL APIs are not thread-safe
-        if (lvgl_port_lock(0)) {
+        if (userSettings != NULL && !userSettings->isShowingMenu && lvgl_port_lock(0)) {
             // display_frequency(current_frequency);
             if (current_frequency > 0) {
                 const char *noteName = get_pitch_name_and_cents_from_frequency(current_frequency, &cents);
@@ -602,8 +602,8 @@ static void oledTask(void *pvParameter) {
         }
 
         // vTaskDelay(pdMS_TO_TICKS(1)); // ~33 times per second
-        // vTaskDelay(pdMS_TO_TICKS(125)); // Yields to reset watchdog in milliseconds
-        vTaskDelay(pdMS_TO_TICKS(50)); // Yields to reset watchdog in milliseconds
+        vTaskDelay(pdMS_TO_TICKS(125)); // Yields to reset watchdog in milliseconds
+        // vTaskDelay(pdMS_TO_TICKS(50)); // Yields to reset watchdog in milliseconds
     }
     vTaskDelay(portMAX_DELAY);
 }
@@ -662,6 +662,8 @@ static void readAndDetectTask(void *pvParameter) {
     ESP_ERROR_CHECK(adc_continuous_register_event_callbacks(handle, &cbs, NULL));
     ESP_ERROR_CHECK(adc_continuous_start(handle));
 
+    oneEUFilter.setBeta(userSettings->oneEUBeta);
+
     // adc_ll_digi_set_convert_limit_num(2); // potential hack for the ESP32 ADC bug
 
     while (1) {
@@ -676,6 +678,12 @@ static void readAndDetectTask(void *pvParameter) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
         while (1) {
+            if (userSettings == NULL || userSettings->isShowingMenu) {
+                // Don't read the signal when the settings menu is showing.
+                vTaskDelay(pdMS_TO_TICKS(500));
+                continue;
+            }
+
             std::vector<float> in(TUNER_ADC_FRAME_SIZE); // a vector of values to pass into qlib
 
             ret = adc_continuous_read(handle, adc_buffer, TUNER_ADC_FRAME_SIZE, &num_of_bytes_read, portMAX_DELAY);
@@ -803,34 +811,4 @@ static void readAndDetectTask(void *pvParameter) {
 
     ESP_ERROR_CHECK(adc_continuous_stop(handle));
     ESP_ERROR_CHECK(adc_continuous_deinit(handle));
-}
-
-// NVS User Settings
-
-void save_settings_to_nvs() {
-    nvs_set_i32(nvs_settings_handle, "in_tune_width", user_in_tune_cents_width);
-    // nvs_set_f32(nvs_settings_handle, "display_brightness", user_display_brightness);
-    // nvs_set_u32(nvs_settings_handle, "note_name_color", user_note_name_color.full);
-    // nvs_set_u32(nvs_settings_handle, "indicator_color", user_pitch_indicator_color.full);
-    nvs_set_i32(nvs_settings_handle, "indicator_width", user_pitch_indicator_width);
-    nvs_set_i32(nvs_settings_handle, "rotation_mode", user_rotation_mode);
-    // nvs_set_f32(nvs_settings_handle, "exp_smoothing", user_exp_smoothing);
-    // nvs_set_f32(nvs_settings_handle, "1eu_beta", user_1eu_beta);
-    nvs_set_i32(nvs_settings_handle, "debounce_interval", user_note_debounce_interval);
-    nvs_commit(nvs_settings_handle);
-}
-
-void load_settings_from_nvs() {
-    nvs_get_i32(nvs_settings_handle, "in_tune_width", &user_in_tune_cents_width);
-    // nvs_get_f32(nvs_settings_handle, "display_brightness", &user_display_brightness);
-    // uint32_t temp_color;
-    // nvs_get_u32(nvs_settings_handle, "note_name_color", &temp_color);
-    // user_note_name_color.full = temp_color;
-    // nvs_get_u32(nvs_settings_handle, "indicator_color", &temp_color);
-    // user_pitch_indicator_color.full = temp_color;
-    nvs_get_i32(nvs_settings_handle, "indicator_width", &user_pitch_indicator_width);
-    nvs_get_i32(nvs_settings_handle, "rotation_mode", &user_rotation_mode);
-    // nvs_get_f32(nvs_settings_handle, "exp_smoothing", &user_exp_smoothing);
-    // nvs_get_f32(nvs_settings_handle, "1eu_beta", &user_1eu_beta);
-    nvs_get_i32(nvs_settings_handle, "debounce_interval", &user_note_debounce_interval);
 }
