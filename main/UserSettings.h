@@ -56,11 +56,6 @@ class UserSettings {
      */
     void loadSettings();
 
-    /**
-     * @brief Saves settings to persistent storage.
-     */
-    void saveSettings();
-
     void restoreDefaultSettings();
 
     void showTunerMenu();
@@ -86,9 +81,15 @@ public:
     UserSettings();
 
     /**
+     * @brief Saves settings to persistent storage.
+     */
+    void saveSettings();
+
+    /**
      * @brief Get the user setting for display orientation.
      */
     lv_display_rotation_t getDisplayOrientation();
+    void setDisplayBrightness(float newBrightness);
 
     /**
      * @brief Gives UserSettings a handle to the main display and the main screen.
@@ -104,6 +105,7 @@ public:
 
     void createMenu(const char *buttonNames[], lv_event_cb_t eventCallbacks[], int numOfButtons);
     void removeCurrentMenu();
+    void createSlider(const char *sliderName, int32_t minRange, int32_t maxRange, lv_event_cb_t sliderCallback, float *sliderValue);
 
     /**
      * @brief Exit the settings menu/screen and resume tuning/standby mode.
@@ -118,6 +120,7 @@ static void handleInTuneThresholdButtonClicked(lv_event_t *e);
 
 static void handleDisplayButtonClicked(lv_event_t *e);
 static void handleBrightnessButtonClicked(lv_event_t *e);
+static void handleBrightnessSlider(lv_event_t *e);
 static void handleNoteColorButtonClicked(lv_event_t *e);
 static void handleIndicatorButtonClicked(lv_event_t *e);
 static void handleRotationButtonClicked(lv_event_t *e);

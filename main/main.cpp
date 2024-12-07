@@ -63,17 +63,6 @@ GPIO 27 - Momentary foot switch input
 
 */
 
-// Variables to store settings
-long int        user_in_tune_cents_width    = 2;
-lv_color_t      user_note_name_color        = lv_color_hex(0xFFFFFF);
-lv_color_t      user_pitch_indicator_color  = lv_color_hex(0xFF0000);
-long int        user_pitch_indicator_width  = 8;
-long int        user_rotation_mode          = 0; // 0: Normal, 1: Upside Down, 2: Left, 3: Right
-float           user_exp_smoothing          = 0.15f;
-float           user_1eu_beta               = 0.007f;
-long int        user_note_debounce_interval = 110; // In milliseconds
-long int        user_display_brightness     = 0.75;
-
 UserSettings *userSettings = NULL;
 bool is_ui_initialized = false;
 
@@ -587,7 +576,7 @@ static void oledTask(void *pvParameter) {
     lvgl_port_add_touch(&touch_cfg);
 
     if (lvgl_port_lock(0)) {
-        ESP_ERROR_CHECK(lcd_display_brightness_set(75));
+        ESP_ERROR_CHECK(lcd_display_brightness_set(userSettings->displayBrightness * 100));
         ESP_ERROR_CHECK(lcd_display_rotate(lvgl_display, userSettings->getDisplayOrientation()));
         // ESP_ERROR_CHECK(lcd_display_rotate(lvgl_display, LV_DISPLAY_ROTATION_0)); // Upside Down
         lvgl_port_unlock();

@@ -127,33 +127,6 @@ void UserSettings::loadSettings() {
     }
 }
 
-void UserSettings::saveSettings() {
-    uint8_t value;
-
-    value = inTuneCentsWidth;
-    nvs_set_u8(nvsHandle, SETTING_KEY_IN_TUNE_WIDTH, value);
-
-    value = (uint8_t)noteNamePalette;
-    nvs_set_u8(nvsHandle, SETTING_KEY_NOTE_NAME_PALETTE, value);
-
-    value = (uint8_t)displayOrientation;
-    nvs_set_u8(nvsHandle, SETTING_KEY_DISPLAY_ORIENTATION, value);
-
-    value = (uint8_t)(expSmoothing * 100);
-    nvs_set_u8(nvsHandle, SETTING_KEY_EXP_SMOOTHING, value);
-
-    value = (uint8_t)(oneEUBeta * 1000);
-    nvs_set_u8(nvsHandle, SETTING_KEY_ONE_EU_BETA, value);
-
-    value = (uint8_t)noteDebounceInterval;
-    nvs_set_u8(nvsHandle, SETTING_KEY_NOTE_DEBOUNCE_INTERVAL, value);
-
-    value = (uint8_t)(displayBrightness * 100);
-    nvs_set_u8(nvsHandle, SETTING_KEY_DISPLAY_BRIGHTNESS, value);
-
-    nvs_commit(nvsHandle);
-}
-
 void UserSettings::restoreDefaultSettings() {
     inTuneCentsWidth = DEFAULT_IN_TUNE_CENTS_WIDTH;
     noteNamePalette = DEFAULT_NOTE_NAME_PALETTE;
@@ -195,6 +168,33 @@ void UserSettings::showAboutMenu() {
 
 UserSettings::UserSettings() {
     loadSettings();
+}
+
+void UserSettings::saveSettings() {
+    uint8_t value;
+
+    value = inTuneCentsWidth;
+    nvs_set_u8(nvsHandle, SETTING_KEY_IN_TUNE_WIDTH, value);
+
+    value = (uint8_t)noteNamePalette;
+    nvs_set_u8(nvsHandle, SETTING_KEY_NOTE_NAME_PALETTE, value);
+
+    value = (uint8_t)displayOrientation;
+    nvs_set_u8(nvsHandle, SETTING_KEY_DISPLAY_ORIENTATION, value);
+
+    value = (uint8_t)(expSmoothing * 100);
+    nvs_set_u8(nvsHandle, SETTING_KEY_EXP_SMOOTHING, value);
+
+    value = (uint8_t)(oneEUBeta * 1000);
+    nvs_set_u8(nvsHandle, SETTING_KEY_ONE_EU_BETA, value);
+
+    value = (uint8_t)noteDebounceInterval;
+    nvs_set_u8(nvsHandle, SETTING_KEY_NOTE_DEBOUNCE_INTERVAL, value);
+
+    value = (uint8_t)(displayBrightness * 100);
+    nvs_set_u8(nvsHandle, SETTING_KEY_DISPLAY_BRIGHTNESS, value);
+
+    nvs_commit(nvsHandle);
 }
 
 lv_display_rotation_t UserSettings::getDisplayOrientation() {
@@ -308,6 +308,60 @@ void UserSettings::removeCurrentMenu() {
     lvgl_port_unlock();
 }
 
+void UserSettings::createSlider(const char *sliderName, int32_t minRange, int32_t maxRange, lv_event_cb_t sliderCallback, float *sliderValue) {
+    // Create a new screen, add the slider to it, add the screen to the stack,
+    // and activate the new screen.
+    if (!lvgl_port_lock(0)) {
+        return;
+    }
+
+    lv_obj_t *scr = lv_obj_create(NULL);
+
+    // Create a scrollable container
+    lv_obj_t *scrollable = lv_obj_create(scr);
+    lv_obj_remove_style_all(scrollable);
+    lv_obj_set_size(scrollable, lv_pct(100), lv_pct(100)); // Full size of the parent
+    lv_obj_set_flex_flow(scrollable, LV_FLEX_FLOW_COLUMN); // Arrange children in a vertical list
+    lv_obj_set_scroll_dir(scrollable, LV_DIR_VER);         // Enable vertical scrolling
+    lv_obj_set_scrollbar_mode(scrollable, LV_SCROLLBAR_MODE_AUTO); // Show scrollbar when scrolling
+    lv_obj_set_style_pad_all(scrollable, 10, 0);           // Add padding for aesthetics
+    lv_obj_set_style_bg_color(scrollable, lv_color_black(), 0); // Optional background color
+
+    // Show the title of the screen at the top middle
+    lv_obj_t *label = lv_label_create(scrollable);
+    lv_label_set_text_static(label, sliderName);
+    lv_obj_set_width(label, lv_pct(100));
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+    // lv_obj_align(label, LV_ALIGN_TOP_MID, 0, 0);
+
+    lv_obj_t *spacer = lv_obj_create(scrollable);
+    lv_obj_remove_style_all(spacer);
+    lv_obj_set_width(spacer, lv_pct(100));
+    lv_obj_set_flex_grow(spacer, 2);
+
+    // Create a slider in the center of the display
+    lv_obj_t *slider = lv_slider_create(scr);
+    lv_obj_center(slider);
+    lv_obj_set_user_data(slider, this); // Send "this" as the user data of the slider
+    lv_slider_set_value(slider, *sliderValue * 100, LV_ANIM_OFF);
+    lv_obj_center(slider);
+    lv_obj_add_event_cb(slider, sliderCallback, LV_EVENT_VALUE_CHANGED, sliderValue); // Send the slider value as the event user data
+    lv_obj_set_style_anim_duration(slider, 2000, 0);
+
+    // We're in a submenu - include a back button
+    lv_obj_t *btn = lv_btn_create(scrollable);
+    lv_obj_set_user_data(btn, this);
+    lv_obj_set_width(btn, lv_pct(100));
+    lv_obj_add_event_cb(btn, handleBackButtonClicked, LV_EVENT_CLICKED, btn);
+    label = lv_label_create(btn);
+    lv_label_set_text_static(label, MENU_BTN_BACK);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+
+    screenStack.push_back(scr); // Save the new screen on the stack
+    lv_screen_load(scr);        // Activate the new screen
+    lvgl_port_unlock();
+}
+
 void UserSettings::exitSettings() {
     if (!lvgl_port_lock(0)) {
         return;
@@ -402,8 +456,26 @@ static void handleDisplayButtonClicked(lv_event_t *e) {
 }
 
 static void handleBrightnessButtonClicked(lv_event_t *e) {
+    ESP_LOGI("Settings", "Brightness slider changed");
     UserSettings *settings = (UserSettings *)lv_obj_get_user_data((lv_obj_t *)lv_event_get_target(e));
+    settings->createSlider(MENU_BTN_BRIGHTNESS, 10, 100, handleBrightnessSlider, &settings->displayBrightness);
+}
 
+static void handleBrightnessSlider(lv_event_t *e) {
+    if (!lvgl_port_lock(0)) {
+        return;
+    }
+    lv_obj_t * slider = (lv_obj_t *)lv_event_get_target(e);
+    float *sliderValue = (float *)lv_event_get_user_data(e);
+    UserSettings *settings = (UserSettings *)lv_obj_get_user_data(slider);
+
+    uint8_t newValue = (uint8_t)lv_slider_get_value(slider);
+
+    if (lcd_display_brightness_set(newValue) == ESP_OK) {
+        *sliderValue = (float)newValue * 0.01;
+        ESP_LOGI("Settings", "New slider value: %.2f", *sliderValue);
+    }
+    lvgl_port_unlock();
 }
 
 static void handleNoteColorButtonClicked(lv_event_t *e) {
@@ -491,6 +563,7 @@ static void handleAboutButtonClicked(lv_event_t *e) {
 static void handleBackButtonClicked(lv_event_t *e) {
     ESP_LOGI("Settings", "Back button clicked");
     UserSettings *settings = (UserSettings *)lv_obj_get_user_data((lv_obj_t *)lv_event_get_target(e));
+    settings->saveSettings(); // TODO: Figure out a better way of doing this than saving every time
     settings->removeCurrentMenu();
 }
 
