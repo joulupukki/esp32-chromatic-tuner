@@ -119,7 +119,7 @@ void UserSettings::loadSettings() {
     }
 
     if (nvs_get_u8(nvsHandle, SETTING_KEY_NOTE_DEBOUNCE_INTERVAL, &value) == ESP_OK) {
-        noteDebounceInterval = value;
+        noteDebounceInterval = (float)value;
     } else {
         noteDebounceInterval = DEFAULT_NOTE_DEBOUNCE_INTERVAL;
     }
@@ -414,8 +414,19 @@ void UserSettings::createRoller(const char *title, const char *itemsString, lv_e
     lvgl_port_unlock();
 }
 
-static void lv_spinbox_increment_event_cb(lv_event_t * e)
-{
+/**
+ * @brief This is a huge hack. We need some additional way to
+ * know about the conversion factor inside of the lv_spinbox_increment_event_cb
+ * and lv_spinbox_decrement_event_cb functions but we don't have them. For now
+ * only one spinbox is on the screen at a time and so we can get away with this.
+ * 
+ * IMPORTANT: Make sure to set this when you create the spinbox!
+ * 
+ * Yuck!
+ */
+float spinboxConversionFactor = 1.0;
+
+static void lv_spinbox_increment_event_cb(lv_event_t * e) {
     if (!lvgl_port_lock(0)) {
         return;
     }
@@ -428,13 +439,13 @@ static void lv_spinbox_increment_event_cb(lv_event_t * e)
         float *spinboxValue = (float *)lv_event_get_user_data(e);
         int32_t newValue = lv_spinbox_get_value(spinbox);
         ESP_LOGI("Settings", "New spinbox value: %ld", newValue);
-        *spinboxValue = newValue * .01;
+        *spinboxValue = newValue * spinboxConversionFactor;
+        ESP_LOGI("Settings", "New settings value: %f", *spinboxValue);
     }
     lvgl_port_unlock();
 }
 
-static void lv_spinbox_decrement_event_cb(lv_event_t * e)
-{
+static void lv_spinbox_decrement_event_cb(lv_event_t * e) {
     if (!lvgl_port_lock(0)) {
         return;
     }
@@ -447,15 +458,17 @@ static void lv_spinbox_decrement_event_cb(lv_event_t * e)
         float *spinboxValue = (float *)lv_event_get_user_data(e);
         int32_t newValue = lv_spinbox_get_value(spinbox);
         ESP_LOGI("Settings", "New spinbox value: %ld", newValue);
-        *spinboxValue = newValue * .01;
+        *spinboxValue = newValue * spinboxConversionFactor;
+        ESP_LOGI("Settings", "New settings value: %f", *spinboxValue);
     }
     lvgl_port_unlock();
 }
 
-void UserSettings::createSpinbox(const char *title, uint32_t minRange, uint32_t maxRange, uint32_t digitCount, uint32_t separatorPosition, float *spinboxValue) {
+void UserSettings::createSpinbox(const char *title, uint32_t minRange, uint32_t maxRange, uint32_t digitCount, uint32_t separatorPosition, float *spinboxValue, float conversionFactor) {
     if (!lvgl_port_lock(0)) {
         return;
     }
+    spinboxConversionFactor = conversionFactor;
     lv_obj_t *scr = lv_obj_create(NULL);
 
     // lv_obj_set_style_pad_bottom(scr, 10, 0);
@@ -472,9 +485,9 @@ void UserSettings::createSpinbox(const char *title, uint32_t minRange, uint32_t 
     lv_spinbox_set_range(spinbox, minRange, maxRange);
     lv_obj_set_style_text_font(spinbox, &lv_font_montserrat_36, 0);
     lv_spinbox_set_digit_format(spinbox, digitCount, separatorPosition);
-    lv_spinbox_set_value(spinbox, *spinboxValue * 100);
+    ESP_LOGI("Settings", "Setting initial spinbox value of: %f / %f", *spinboxValue, conversionFactor);
+    lv_spinbox_set_value(spinbox, *spinboxValue / conversionFactor);
     lv_spinbox_step_prev(spinbox); // Moves the step (cursor)
-    // lv_obj_set_width(spinbox, 100);
     lv_obj_center(spinbox);
 
     int32_t h = lv_obj_get_height(spinbox);
@@ -813,7 +826,7 @@ static void handleExpSmoothingButtonClicked(lv_event_t *e) {
     }
     settings = (UserSettings *)lv_obj_get_user_data((lv_obj_t *)lv_event_get_target(e));
     lvgl_port_unlock();
-    settings->createSpinbox(MENU_BTN_EXP_SMOOTHING, 0, 100, 3, 1, &settings->expSmoothing);
+    settings->createSpinbox(MENU_BTN_EXP_SMOOTHING, 0, 100, 3, 1, &settings->expSmoothing, 0.01);
 }
 
 static void handle1EUBetaButtonClicked(lv_event_t *e) {
@@ -823,7 +836,8 @@ static void handle1EUBetaButtonClicked(lv_event_t *e) {
     }
     settings = (UserSettings *)lv_obj_get_user_data((lv_obj_t *)lv_event_get_target(e));
     lvgl_port_unlock();
-
+    ESP_LOGI("Settings", "Opening 1EU Spinbox with %f", settings->oneEUBeta);
+    settings->createSpinbox(MENU_BTN_1EU_BETA, 0, 1000, 4, 1, &settings->oneEUBeta, 0.001);
 }
 
 static void handle1EUFilterFirstButtonClicked(lv_event_t *e) {
@@ -853,7 +867,7 @@ static void handleNameDebouncingButtonClicked(lv_event_t *e) {
     }
     settings = (UserSettings *)lv_obj_get_user_data((lv_obj_t *)lv_event_get_target(e));
     lvgl_port_unlock();
-
+    settings->createSpinbox(MENU_BTN_NAME_DEBOUNCING, 100, 500, 3, 3, &settings->noteDebounceInterval, 1);
 }
 
 static void handleAboutButtonClicked(lv_event_t *e) {

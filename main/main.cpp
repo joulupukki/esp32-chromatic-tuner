@@ -136,8 +136,6 @@ lv_obj_t *main_screen = NULL;
 #define PITCH_INDICATOR_BAR_WIDTH       8
 
 #define MAX_PITCH_NAME_LENGTH           4
-#define NOTE_NAME_UPDATE_TIMER_INTERVAL 100 // milliseconds to debounce setting the note label
-                                            // to keep LVGL happy without overloading it.
 using namespace cycfi::q::pitch_names;
 using frequency = cycfi::q::frequency;
 using pitch = cycfi::q::pitch;
@@ -389,6 +387,7 @@ void update_note_name(const char *new_value) {
     // set too often for LVGL. ADC makes it run SUPER
     // fast and can crash the software.
     lv_timer_set_user_data(note_name_update_timer, (void *)new_value);
+    lv_timer_set_period(note_name_update_timer, (uint32_t)userSettings->noteDebounceInterval);
     lv_timer_reset(note_name_update_timer);
     lv_timer_resume(note_name_update_timer);
 }
@@ -504,7 +503,7 @@ static esp_err_t app_lvgl_main() {
 
     // Create a new timer that will fire. This will
     // debounce the calls to the UI to update the note name.
-    note_name_update_timer = lv_timer_create(set_note_name_cb, NOTE_NAME_UPDATE_TIMER_INTERVAL, NULL);
+    note_name_update_timer = lv_timer_create(set_note_name_cb, userSettings->noteDebounceInterval, NULL);
     lv_timer_pause(note_name_update_timer);
     lv_timer_reset(note_name_update_timer);
 

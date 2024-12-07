@@ -25,7 +25,7 @@ extern "C" { // because these files are C and not C++
 #define DEFAULT_DISPLAY_ORIENTATION     ((TunerOrientation) orientationNormal);
 #define DEFAULT_EXP_SMOOTHING           ((float) 0.15)
 #define DEFAULT_ONE_EU_BETA             ((float) 0.05)
-#define DEFAULT_NOTE_DEBOUNCE_INTERVAL  ((uint8_t) 110)
+#define DEFAULT_NOTE_DEBOUNCE_INTERVAL  ((float) 110.0)
 #define DEFAULT_DISPLAY_BRIGHTNESS      ((float) 0.75)
 
 enum TunerOrientation: uint8_t {
@@ -71,7 +71,7 @@ public:
     TunerOrientation    displayOrientation      = DEFAULT_DISPLAY_ORIENTATION;
     float               expSmoothing            = DEFAULT_EXP_SMOOTHING;   // 15 * .01 = 0.15,              Range: 0 - 100
     float               oneEUBeta               = DEFAULT_ONE_EU_BETA;   // 50 * .001 = 0.05,               Range: 0 - 1000
-    uint8_t             noteDebounceInterval    = DEFAULT_NOTE_DEBOUNCE_INTERVAL;  // In milliseconds,      Range: 100 - 500
+    float               noteDebounceInterval    = DEFAULT_NOTE_DEBOUNCE_INTERVAL;  // In milliseconds,      Range: 100 - 500
     float               displayBrightness       = DEFAULT_DISPLAY_BRIGHTNESS;   // 75 * .01 = 0.75,         Range: 10 - 100
 
     /**
@@ -107,7 +107,7 @@ public:
     void removeCurrentMenu();
     void createSlider(const char *sliderName, int32_t minRange, int32_t maxRange, lv_event_cb_t sliderCallback, float *sliderValue);
     void createRoller(const char *title, const char *itemsString, lv_event_cb_t rollerCallback, uint8_t *rollerValue);
-    void createSpinbox(const char *title, uint32_t minRange, uint32_t maxRange, uint32_t digitCount, uint32_t separatorPosition, float *spinboxValue);
+    void createSpinbox(const char *title, uint32_t minRange, uint32_t maxRange, uint32_t digitCount, uint32_t separatorPosition, float *spinboxValue, float conversionFactor);
 
     /**
      * @brief Exit the settings menu/screen and resume tuning/standby mode.
