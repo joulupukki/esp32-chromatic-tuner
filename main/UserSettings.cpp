@@ -43,7 +43,7 @@
 
 SETTINGS
     Tuning
-        [ ] In Tune Width
+        [X] In Tune Width
             Show a slider and allow the user to choose integer values between 1 and 10. Save the setting into "user_in_tune_cents_width"
         [x] Back - returns to the main menu
 
@@ -63,10 +63,13 @@ SETTINGS
             Allow the user to use a slider to choose a float value between 0.000 and 2.000 allowing up to 3 decimal places of granularity. Save the setting into "user_1eu_beta"
         [ ] Note Debouncing
             Allow the user to use a slider to choose an integer value between 100 and 400. Save this setting into "user_note_debounce_interval"
-        [B] Back - returns to the main menu
+        [x] Back - returns to the main menu
 
     About
         [ ] Show version information
+        [ ] Acknowledgements
+        [ ] Restore Factory Defaults
+            [ ] Confirmation Yes/No
         [ ] Back
         
     Exit -> Selecting this menu exits the settings menu
