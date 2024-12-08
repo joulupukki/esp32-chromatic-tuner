@@ -606,7 +606,7 @@ static void oledTask(void *pvParameter) {
         lv_task_handler();
 
         // Lock the mutex due to the LVGL APIs are not thread-safe
-        if (userSettings != NULL && !userSettings->isShowingMenu && lvgl_port_lock(0)) {
+        if (userSettings != NULL && !userSettings->isShowingSettings() && lvgl_port_lock(0)) {
             float frequency = get_current_frequency();
             if (frequency > 0) {
                 const char *noteName = get_pitch_name_and_cents_from_frequency(frequency, &cents);
@@ -694,7 +694,7 @@ static void readAndDetectTask(void *pvParameter) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
         while (1) {
-            if (userSettings == NULL || userSettings->isShowingMenu) {
+            if (userSettings == NULL || userSettings->isShowingSettings()) {
                 // Don't read the signal when the settings menu is showing.
                 vTaskDelay(pdMS_TO_TICKS(500));
                 continue;
