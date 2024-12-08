@@ -35,6 +35,8 @@ enum TunerOrientation: uint8_t {
     orientationUpsideDown,
 };
 
+typedef void (*settings_changed_cb_t)();
+
 /// @brief A class used to display and manage user settings.
 class UserSettings {
     /**
@@ -51,17 +53,14 @@ class UserSettings {
 
     nvs_handle_t    nvsHandle;
 
+    settings_changed_cb_t settingsChangedCallback;
+
     /**
      * @brief Loads settings from persistent storage.
      */
     void loadSettings();
 
     void restoreDefaultSettings();
-
-    void showTunerMenu();
-    void showDisplayMenu();
-    void showAdvancedMenu();
-    void showAboutMenu();
 public:
     bool isShowingMenu = false;
 
@@ -78,7 +77,7 @@ public:
      * @brief Create the settings object and sets its parameters
      * @param mainScreen The LVGL main screen in the app.
      */
-    UserSettings();
+    UserSettings(settings_changed_cb_t callback);
 
     /**
      * @brief Saves settings to persistent storage.
@@ -103,7 +102,7 @@ public:
      */
     void showSettings();
 
-    void createMenu(const char *buttonNames[], lv_event_cb_t eventCallbacks[], int numOfButtons);
+    void createMenu(const char *buttonNames[], const char *buttonSymbols[], lv_palette_t *buttonColors, lv_event_cb_t eventCallbacks[], int numOfButtons);
     void removeCurrentMenu();
     void createSlider(const char *sliderName, int32_t minRange, int32_t maxRange, lv_event_cb_t sliderCallback, float *sliderValue);
     void createRoller(const char *title, const char *itemsString, lv_event_cb_t rollerCallback, uint8_t *rollerValue);
@@ -125,7 +124,18 @@ static void handleInTuneThresholdRoller(lv_event_t *e);
 static void handleDisplayButtonClicked(lv_event_t *e);
 static void handleBrightnessButtonClicked(lv_event_t *e);
 static void handleBrightnessSlider(lv_event_t *e);
+
 static void handleNoteColorButtonClicked(lv_event_t *e);
+static void handleNoteColorSelected(lv_event_t *e);
+static void handleNoteColorWhiteSelected(lv_event_t *e);
+static void handleNoteColorRedSelected(lv_event_t *e);
+static void handleNoteColorPinkSelected(lv_event_t *e);
+static void handleNoteColorPurpleSelected(lv_event_t *e);
+static void handleNoteColorBlueSelected(lv_event_t *e);
+static void handleNoteColorGreenSelected(lv_event_t *e);
+static void handleNoteColorOrangeSelected(lv_event_t *e);
+static void handleNoteColorYellowSelected(lv_event_t *e);
+
 static void handleIndicatorButtonClicked(lv_event_t *e);
 static void handleRotationButtonClicked(lv_event_t *e);
 static void handleRotationNormalClicked(lv_event_t *e);

@@ -233,6 +233,14 @@ void create_labels(lv_obj_t * parent) {
     lv_style_init(&note_name_label_style);    
     // lv_style_set_text_font(&note_name_label_style, &lv_font_montserrat_48);
     lv_style_set_text_font(&note_name_label_style, &raleway_128);
+    
+    lv_palette_t palette = userSettings->noteNamePalette;
+    if (palette == LV_PALETTE_NONE) {
+        lv_style_set_text_color(&note_name_label_style, lv_color_white());
+    } else {
+        lv_style_set_text_color(&note_name_label_style, lv_palette_main(palette));
+    }
+
     lv_obj_add_style(note_name_label, &note_name_label_style, 0);
 
     lv_obj_align(note_name_label, LV_ALIGN_CENTER, 0, 20); // Offset down by 20 pixels
@@ -393,7 +401,6 @@ void update_note_name(const char *new_value) {
 }
 
 void display_pitch(float frequency, const char *noteName, float cents) {
-    return;
     if (noteName != NULL) {
         lv_label_set_text_fmt(frequency_label, "%.2f", frequency);
         lv_obj_clear_flag(frequency_label, LV_OBJ_FLAG_HIDDEN);
@@ -516,10 +523,29 @@ static esp_err_t app_lvgl_main() {
     return ESP_OK;
 }
 
+void user_settings_changed() {
+    ESP_LOGI(TAG, "User settings changed");
+    if (!lvgl_port_lock(0)) {
+        return;
+    }
+
+    lv_palette_t palette = userSettings->noteNamePalette;
+    if (palette == LV_PALETTE_NONE) {
+        lv_obj_set_style_text_color(note_name_label, lv_color_white(), 0);
+    } else {
+        lv_obj_set_style_text_color(note_name_label, lv_palette_main(palette), 0);
+    }
+
+    lvgl_port_unlock();
+
+    oneEUFilter.setBeta(userSettings->oneEUBeta);
+    smoother.setAmount(userSettings->expSmoothing);
+}
+
 extern "C" void app_main() {
 
     // Initialize NVS (Persistent Flash Storage for User Settings)
-    userSettings = new UserSettings();
+    userSettings = new UserSettings(user_settings_changed);
 
     // Start the Display Task
     xTaskCreatePinnedToCore(
@@ -670,21 +696,11 @@ static void readAndDetectTask(void *pvParameter) {
          */
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
-        bool hasConsumedUserSettings = false; // Use this so we don't make unnecessary calls in the loop
-
         while (1) {
             if (userSettings == NULL || userSettings->isShowingMenu) {
                 // Don't read the signal when the settings menu is showing.
-                hasConsumedUserSettings = false;
                 vTaskDelay(pdMS_TO_TICKS(500));
                 continue;
-            }
-
-            if (!hasConsumedUserSettings) {
-                // Set these values as they may have changed in the user settings menu.
-                oneEUFilter.setBeta(userSettings->oneEUBeta);
-                smoother.setAmount(userSettings->expSmoothing);
-                hasConsumedUserSettings = true;
             }
 
             std::vector<float> in(TUNER_ADC_FRAME_SIZE); // a vector of values to pass into qlib
