@@ -25,7 +25,7 @@ extern "C" { // because these files are C and not C++
 #define DEFAULT_DISPLAY_ORIENTATION     ((TunerOrientation) orientationNormal);
 #define DEFAULT_EXP_SMOOTHING           ((float) 0.15)
 #define DEFAULT_ONE_EU_BETA             ((float) 0.05)
-#define DEFAULT_NOTE_DEBOUNCE_INTERVAL  ((uint8_t) 110)
+#define DEFAULT_NOTE_DEBOUNCE_INTERVAL  ((float) 110.0)
 #define DEFAULT_DISPLAY_BRIGHTNESS      ((float) 0.75)
 
 enum TunerOrientation: uint8_t {
@@ -34,6 +34,8 @@ enum TunerOrientation: uint8_t {
     orientationRight,
     orientationUpsideDown,
 };
+
+typedef void (*settings_changed_cb_t)();
 
 /// @brief A class used to display and manage user settings.
 class UserSettings {
@@ -51,17 +53,13 @@ class UserSettings {
 
     nvs_handle_t    nvsHandle;
 
+    settings_changed_cb_t settingsChangedCallback;
+
     /**
      * @brief Loads settings from persistent storage.
      */
     void loadSettings();
 
-    void restoreDefaultSettings();
-
-    void showTunerMenu();
-    void showDisplayMenu();
-    void showAdvancedMenu();
-    void showAboutMenu();
 public:
     bool isShowingMenu = false;
 
@@ -71,20 +69,22 @@ public:
     TunerOrientation    displayOrientation      = DEFAULT_DISPLAY_ORIENTATION;
     float               expSmoothing            = DEFAULT_EXP_SMOOTHING;   // 15 * .01 = 0.15,              Range: 0 - 100
     float               oneEUBeta               = DEFAULT_ONE_EU_BETA;   // 50 * .001 = 0.05,               Range: 0 - 1000
-    uint8_t             noteDebounceInterval    = DEFAULT_NOTE_DEBOUNCE_INTERVAL;  // In milliseconds,      Range: 100 - 500
+    float               noteDebounceInterval    = DEFAULT_NOTE_DEBOUNCE_INTERVAL;  // In milliseconds,      Range: 100 - 500
     float               displayBrightness       = DEFAULT_DISPLAY_BRIGHTNESS;   // 75 * .01 = 0.75,         Range: 10 - 100
 
     /**
      * @brief Create the settings object and sets its parameters
      * @param mainScreen The LVGL main screen in the app.
      */
-    UserSettings();
+    UserSettings(settings_changed_cb_t callback);
 
     /**
      * @brief Saves settings to persistent storage.
      */
     void saveSettings();
 
+    void restoreDefaultSettings();
+    
     /**
      * @brief Get the user setting for display orientation.
      */
@@ -103,10 +103,11 @@ public:
      */
     void showSettings();
 
-    void createMenu(const char *buttonNames[], lv_event_cb_t eventCallbacks[], int numOfButtons);
+    void createMenu(const char *buttonNames[], const char *buttonSymbols[], lv_palette_t *buttonColors, lv_event_cb_t eventCallbacks[], int numOfButtons);
     void removeCurrentMenu();
     void createSlider(const char *sliderName, int32_t minRange, int32_t maxRange, lv_event_cb_t sliderCallback, float *sliderValue);
     void createRoller(const char *title, const char *itemsString, lv_event_cb_t rollerCallback, uint8_t *rollerValue);
+    void createSpinbox(const char *title, uint32_t minRange, uint32_t maxRange, uint32_t digitCount, uint32_t separatorPosition, float *spinboxValue, float conversionFactor);
 
     /**
      * @brief Exit the settings menu/screen and resume tuning/standby mode.
@@ -124,7 +125,18 @@ static void handleInTuneThresholdRoller(lv_event_t *e);
 static void handleDisplayButtonClicked(lv_event_t *e);
 static void handleBrightnessButtonClicked(lv_event_t *e);
 static void handleBrightnessSlider(lv_event_t *e);
+
 static void handleNoteColorButtonClicked(lv_event_t *e);
+static void handleNoteColorSelected(lv_event_t *e);
+static void handleNoteColorWhiteSelected(lv_event_t *e);
+static void handleNoteColorRedSelected(lv_event_t *e);
+static void handleNoteColorPinkSelected(lv_event_t *e);
+static void handleNoteColorPurpleSelected(lv_event_t *e);
+static void handleNoteColorBlueSelected(lv_event_t *e);
+static void handleNoteColorGreenSelected(lv_event_t *e);
+static void handleNoteColorOrangeSelected(lv_event_t *e);
+static void handleNoteColorYellowSelected(lv_event_t *e);
+
 static void handleIndicatorButtonClicked(lv_event_t *e);
 static void handleRotationButtonClicked(lv_event_t *e);
 static void handleRotationNormalClicked(lv_event_t *e);
@@ -138,6 +150,9 @@ static void handle1EUBetaButtonClicked(lv_event_t *e);
 static void handle1EUFilterFirstButtonClicked(lv_event_t *e);
 static void handleMovingAvgButtonClicked(lv_event_t *e);
 static void handleNameDebouncingButtonClicked(lv_event_t *e);
+
 static void handleAboutButtonClicked(lv_event_t *e);
+static void handleFactoryResetButtonClicked(lv_event_t *e);
+
 static void handleBackButtonClicked(lv_event_t *e);
 static void handleExitButtonClicked(lv_event_t *e);

@@ -26,6 +26,7 @@
 #define MENU_BTN_NAME_DEBOUNCING    "Name Debouncing"
 
 #define MENU_BTN_ABOUT              "About"
+    #define MENU_BTN_FACTORY_RESET      "Factory Reset"
 
 #define MENU_BTN_BACK               "Back"
 #define MENU_BTN_EXIT               "Exit"
@@ -50,18 +51,18 @@ SETTINGS
     Display Settings
         [x] Brightness
             Show a slider and show values between 10 and 100. Save to a setting named "user_display_brightness" as a float value between 0.1 and 1.0
-        [ ] Note Color
+        [x] Note Color
             Show a color picker and save setting to a variable named "user_note_name_color"
         [x] Rotation
             Allow the user to choose between: Normal, Upside Down, Left, or Right. Save the setting into "user_rotation_mode"
         [x] Back - returns to the main menu
 
     Debug
-        [ ] Exp Smoothing
+        [x] Exp Smoothing
             Allow the user to use a slider to choose a float value between 0.0 and 1.0. Show only 1 decimal after the decimal point. Save the setting into "user_exp_smoothing"
-        [ ] 1EU Beta
+        [x] 1EU Beta
             Allow the user to use a slider to choose a float value between 0.000 and 2.000 allowing up to 3 decimal places of granularity. Save the setting into "user_1eu_beta"
-        [ ] Note Debouncing
+        [x] Note Debouncing
             Allow the user to use a slider to choose an integer value between 100 and 400. Save this setting into "user_note_debounce_interval"
         [x] Back - returns to the main menu
 
@@ -119,7 +120,7 @@ void UserSettings::loadSettings() {
     }
 
     if (nvs_get_u8(nvsHandle, SETTING_KEY_NOTE_DEBOUNCE_INTERVAL, &value) == ESP_OK) {
-        noteDebounceInterval = value;
+        noteDebounceInterval = (float)value;
     } else {
         noteDebounceInterval = DEFAULT_NOTE_DEBOUNCE_INTERVAL;
     }
@@ -131,46 +132,12 @@ void UserSettings::loadSettings() {
     }
 }
 
-void UserSettings::restoreDefaultSettings() {
-    inTuneCentsWidth = DEFAULT_IN_TUNE_CENTS_WIDTH;
-    noteNamePalette = DEFAULT_NOTE_NAME_PALETTE;
-    displayOrientation = DEFAULT_DISPLAY_ORIENTATION;
-    expSmoothing = DEFAULT_EXP_SMOOTHING;
-    oneEUBeta = DEFAULT_ONE_EU_BETA;
-    noteDebounceInterval = DEFAULT_NOTE_DEBOUNCE_INTERVAL;
-    displayBrightness = DEFAULT_DISPLAY_BRIGHTNESS;
-
-    saveSettings();
-
-    // Reboot!
-    esp_restart();
-}
-
-void UserSettings::showTunerMenu() {
-
-}
-
-void UserSettings::showDisplayMenu() {
-    // if (!lvgl_port_lock(0)) {
-    //     return;
-    // }
-    // ESP_ERROR_CHECK(lcd_display_rotate(lvgl_display, LV_DISPLAY_ROTATION_90));
-    // lvgl_port_unlock();
-}
-
-void UserSettings::showAdvancedMenu() {
-
-}
-
-void UserSettings::showAboutMenu() {
-
-}
-
 //
 // PUBLIC Methods
 //
 
-UserSettings::UserSettings() {
+UserSettings::UserSettings(settings_changed_cb_t callback) {
+    settingsChangedCallback = callback;
     loadSettings();
 }
 
@@ -199,6 +166,23 @@ void UserSettings::saveSettings() {
     nvs_set_u8(nvsHandle, SETTING_KEY_DISPLAY_BRIGHTNESS, value);
 
     nvs_commit(nvsHandle);
+
+    settingsChangedCallback();
+}
+
+void UserSettings::restoreDefaultSettings() {
+    inTuneCentsWidth = DEFAULT_IN_TUNE_CENTS_WIDTH;
+    noteNamePalette = DEFAULT_NOTE_NAME_PALETTE;
+    displayOrientation = DEFAULT_DISPLAY_ORIENTATION;
+    expSmoothing = DEFAULT_EXP_SMOOTHING;
+    oneEUBeta = DEFAULT_ONE_EU_BETA;
+    noteDebounceInterval = DEFAULT_NOTE_DEBOUNCE_INTERVAL;
+    displayBrightness = DEFAULT_DISPLAY_BRIGHTNESS;
+
+    saveSettings();
+
+    // Reboot!
+    esp_restart();
 }
 
 lv_display_rotation_t UserSettings::getDisplayOrientation() {
@@ -221,6 +205,12 @@ void UserSettings::setDisplayAndScreen(lv_display_t *display, lv_obj_t *screen) 
 
 void UserSettings::showSettings() {
     isShowingMenu = true;
+    const char *symbolNames[] = {
+        LV_SYMBOL_HOME,
+        LV_SYMBOL_IMAGE,
+        LV_SYMBOL_SETTINGS,
+        LV_SYMBOL_EYE_OPEN,
+    };
     const char *buttonNames[] = {
         MENU_BTN_TUNER,
         MENU_BTN_DISPLAY,
@@ -234,10 +224,10 @@ void UserSettings::showSettings() {
         handleDebugButtonClicked,
         handleAboutButtonClicked,
     };
-    createMenu(buttonNames, callbackFunctions, 4);
+    createMenu(buttonNames, symbolNames, NULL, callbackFunctions, 4);
 }
 
-void UserSettings::createMenu(const char *buttonNames[], lv_event_cb_t eventCallbacks[], int numOfButtons) {
+void UserSettings::createMenu(const char *buttonNames[], const char *buttonSymbols[], lv_palette_t *buttonColors, lv_event_cb_t eventCallbacks[], int numOfButtons) {
     // Create a new screen, add all the buttons to it,
     // add the screen to the stack, and activate the new screen
     if (!lvgl_port_lock(0)) {
@@ -270,6 +260,24 @@ void UserSettings::createMenu(const char *buttonNames[], lv_event_cb_t eventCall
         lv_obj_add_event_cb(btn, eventCallback, LV_EVENT_CLICKED, btn);
         label = lv_label_create(btn);
         lv_label_set_text_static(label, buttonName);
+        if (buttonSymbols != NULL) {
+            const char *symbol = buttonSymbols[i];
+            lv_obj_t *img = lv_image_create(btn);
+            lv_image_set_src(img, symbol);
+            lv_obj_align(img, LV_ALIGN_LEFT_MID, 0, 0);
+            lv_obj_align_to(label, img, LV_ALIGN_OUT_RIGHT_MID, 6, 0);
+        }
+
+        if (buttonColors != NULL) {
+            lv_palette_t palette = buttonColors[i];
+            if (palette == LV_PALETTE_NONE) {
+                // Set to white
+                lv_obj_set_style_bg_color(btn, lv_color_white(), 0);
+                lv_obj_set_style_text_color(label, lv_color_black(), 0);
+            } else {
+                lv_obj_set_style_bg_color(btn, lv_palette_main(palette), 0);
+            }
+        }
     }
 
     if (screenStack.size() == 1) {
@@ -280,6 +288,8 @@ void UserSettings::createMenu(const char *buttonNames[], lv_event_cb_t eventCall
         lv_obj_add_event_cb(btn, handleExitButtonClicked, LV_EVENT_CLICKED, btn);
         label = lv_label_create(btn);
         lv_label_set_text_static(label, MENU_BTN_EXIT);
+        lv_obj_set_style_text_align(btn, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_align(label, LV_ALIGN_CENTER, 0, 0);
     } else {
         // We're in a submenu - include a back button
         btn = lv_btn_create(scrollable);
@@ -288,6 +298,8 @@ void UserSettings::createMenu(const char *buttonNames[], lv_event_cb_t eventCall
         lv_obj_add_event_cb(btn, handleBackButtonClicked, LV_EVENT_CLICKED, btn);
         label = lv_label_create(btn);
         lv_label_set_text_static(label, MENU_BTN_BACK);
+        lv_obj_set_style_text_align(btn, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_align(label, LV_ALIGN_CENTER, 0, 0);
     }
 
     screenStack.push_back(scr); // Save the new screen on the stack
@@ -358,7 +370,8 @@ void UserSettings::createSlider(const char *sliderName, int32_t minRange, int32_
     lv_obj_add_event_cb(btn, handleBackButtonClicked, LV_EVENT_CLICKED, btn);
     label = lv_label_create(btn);
     lv_label_set_text_static(label, MENU_BTN_BACK);
-    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_align(btn, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(label, LV_ALIGN_CENTER, 0, 0);
 
     screenStack.push_back(scr); // Save the new screen on the stack
     lv_screen_load(scr);        // Activate the new screen
@@ -407,7 +420,114 @@ void UserSettings::createRoller(const char *title, const char *itemsString, lv_e
     lv_obj_add_event_cb(btn, handleBackButtonClicked, LV_EVENT_CLICKED, btn);
     label = lv_label_create(btn);
     lv_label_set_text_static(label, MENU_BTN_BACK);
+    lv_obj_set_style_text_align(btn, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(label, LV_ALIGN_CENTER, 0, 0);
+
+    screenStack.push_back(scr); // Save the new screen on the stack
+    lv_screen_load(scr);        // Activate the new screen
+    lvgl_port_unlock();
+}
+
+/**
+ * @brief This is a huge hack. We need some additional way to
+ * know about the conversion factor inside of the lv_spinbox_increment_event_cb
+ * and lv_spinbox_decrement_event_cb functions but we don't have them. For now
+ * only one spinbox is on the screen at a time and so we can get away with this.
+ * 
+ * IMPORTANT: Make sure to set this when you create the spinbox!
+ * 
+ * Yuck!
+ */
+float spinboxConversionFactor = 1.0;
+
+static void lv_spinbox_increment_event_cb(lv_event_t * e) {
+    if (!lvgl_port_lock(0)) {
+        return;
+    }
+    lv_event_code_t code = lv_event_get_code(e);
+    lv_obj_t *btn = (lv_obj_t *)lv_event_get_target(e);
+    lv_obj_t *spinbox = (lv_obj_t *)lv_obj_get_user_data(btn);
+    if(code == LV_EVENT_SHORT_CLICKED || code  == LV_EVENT_LONG_PRESSED_REPEAT) {
+        lv_spinbox_increment(spinbox);
+
+        float *spinboxValue = (float *)lv_event_get_user_data(e);
+        int32_t newValue = lv_spinbox_get_value(spinbox);
+        ESP_LOGI("Settings", "New spinbox value: %ld", newValue);
+        *spinboxValue = newValue * spinboxConversionFactor;
+        ESP_LOGI("Settings", "New settings value: %f", *spinboxValue);
+    }
+    lvgl_port_unlock();
+}
+
+static void lv_spinbox_decrement_event_cb(lv_event_t * e) {
+    if (!lvgl_port_lock(0)) {
+        return;
+    }
+    lv_event_code_t code = lv_event_get_code(e);
+    lv_obj_t *btn = (lv_obj_t *)lv_event_get_target(e);
+    lv_obj_t *spinbox = (lv_obj_t *)lv_obj_get_user_data(btn);
+    if(code == LV_EVENT_SHORT_CLICKED || code == LV_EVENT_LONG_PRESSED_REPEAT) {
+        lv_spinbox_decrement(spinbox);
+
+        float *spinboxValue = (float *)lv_event_get_user_data(e);
+        int32_t newValue = lv_spinbox_get_value(spinbox);
+        ESP_LOGI("Settings", "New spinbox value: %ld", newValue);
+        *spinboxValue = newValue * spinboxConversionFactor;
+        ESP_LOGI("Settings", "New settings value: %f", *spinboxValue);
+    }
+    lvgl_port_unlock();
+}
+
+void UserSettings::createSpinbox(const char *title, uint32_t minRange, uint32_t maxRange, uint32_t digitCount, uint32_t separatorPosition, float *spinboxValue, float conversionFactor) {
+    if (!lvgl_port_lock(0)) {
+        return;
+    }
+    spinboxConversionFactor = conversionFactor;
+    lv_obj_t *scr = lv_obj_create(NULL);
+
+    // lv_obj_set_style_pad_bottom(scr, 10, 0);
+    lv_obj_set_style_bg_color(scr, lv_color_black(), 0); // Optional background color
+
+    // Show the title of the screen at the top middle
+    lv_obj_t *label = lv_label_create(scr);
+    lv_label_set_text_static(label, title);
+    lv_obj_set_width(label, lv_pct(100));
     lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(label, LV_ALIGN_TOP_MID, 0, 0);
+
+    lv_obj_t * spinbox = lv_spinbox_create(scr);
+    lv_spinbox_set_range(spinbox, minRange, maxRange);
+    lv_obj_set_style_text_font(spinbox, &lv_font_montserrat_36, 0);
+    lv_spinbox_set_digit_format(spinbox, digitCount, separatorPosition);
+    ESP_LOGI("Settings", "Setting initial spinbox value of: %f / %f", *spinboxValue, conversionFactor);
+    lv_spinbox_set_value(spinbox, *spinboxValue / conversionFactor);
+    lv_spinbox_step_prev(spinbox); // Moves the step (cursor)
+    lv_obj_center(spinbox);
+
+    int32_t h = lv_obj_get_height(spinbox);
+
+    lv_obj_t * btn = lv_button_create(scr);
+    lv_obj_set_user_data(btn, spinbox);
+    lv_obj_set_size(btn, h, h);
+    lv_obj_align_to(btn, spinbox, LV_ALIGN_OUT_RIGHT_MID, 5, 0);
+    lv_obj_set_style_bg_image_src(btn, LV_SYMBOL_PLUS, 0);
+    lv_obj_add_event_cb(btn, lv_spinbox_increment_event_cb, LV_EVENT_ALL, spinboxValue);
+
+    btn = lv_button_create(scr);
+    lv_obj_set_user_data(btn, spinbox);
+    lv_obj_set_size(btn, h, h);
+    lv_obj_align_to(btn, spinbox, LV_ALIGN_OUT_LEFT_MID, -5, 0);
+    lv_obj_set_style_bg_image_src(btn, LV_SYMBOL_MINUS, 0);
+    lv_obj_add_event_cb(btn, lv_spinbox_decrement_event_cb, LV_EVENT_ALL, spinboxValue);
+
+    btn = lv_btn_create(scr);
+    lv_obj_set_user_data(btn, this);
+    lv_obj_set_width(btn, lv_pct(100));
+    lv_obj_add_event_cb(btn, handleBackButtonClicked, LV_EVENT_CLICKED, btn);
+    label = lv_label_create(btn);
+    lv_label_set_text_static(label, MENU_BTN_BACK);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(btn, LV_ALIGN_BOTTOM_MID, 0, 0);
 
     screenStack.push_back(scr); // Save the new screen on the stack
     lv_screen_load(scr);        // Activate the new screen
@@ -493,7 +613,7 @@ static void handleTunerButtonClicked(lv_event_t *e) {
     lv_event_cb_t callbackFunctions[] = {
         handleInTuneThresholdButtonClicked,
     };
-    settings->createMenu(buttonNames, callbackFunctions, 1);
+    settings->createMenu(buttonNames, NULL, NULL, callbackFunctions, 1);
 }
 
 static void handleInTuneThresholdButtonClicked(lv_event_t *e) {
@@ -585,7 +705,7 @@ static void handleDisplayButtonClicked(lv_event_t *e) {
         handleNoteColorButtonClicked,
         handleRotationButtonClicked,
     };
-    settings->createMenu(buttonNames, callbackFunctions, 3);
+    settings->createMenu(buttonNames, NULL, NULL, callbackFunctions, 3);
 }
 
 static void handleBrightnessButtonClicked(lv_event_t *e) {
@@ -623,7 +743,84 @@ static void handleNoteColorButtonClicked(lv_event_t *e) {
     }
     settings = (UserSettings *)lv_obj_get_user_data((lv_obj_t *)lv_event_get_target(e));
     lvgl_port_unlock();
+    const char *buttonNames[] = {
+        "White", // Default
+        "Red",
+        "Pink",
+        "Purple",
+        "Blue",
+        "Green",
+        "Orange",
+        "Yellow",
+    };
+    lv_palette_t buttonColors[] = {
+        LV_PALETTE_NONE, // Default
+        LV_PALETTE_RED,
+        LV_PALETTE_PINK,
+        LV_PALETTE_PURPLE,
+        LV_PALETTE_LIGHT_BLUE,
+        LV_PALETTE_LIGHT_GREEN,
+        LV_PALETTE_ORANGE,
+        LV_PALETTE_YELLOW,
+    };
+    lv_event_cb_t callbackFunctions[] = {
+        handleNoteColorWhiteSelected,
+        handleNoteColorRedSelected,
+        handleNoteColorPinkSelected,
+        handleNoteColorPurpleSelected,
+        handleNoteColorBlueSelected,
+        handleNoteColorGreenSelected,
+        handleNoteColorOrangeSelected,
+        handleNoteColorYellowSelected,
+    };
+    settings->createMenu(buttonNames, NULL, buttonColors, callbackFunctions, 8);
 }
+
+static void handleNoteColorSelected(lv_event_t *e, lv_palette_t palette) {
+    ESP_LOGI("Settings", "Note Color Selection clicked");
+    UserSettings *settings;
+    if (!lvgl_port_lock(0)) {
+        return;
+    }
+    settings = (UserSettings *)lv_obj_get_user_data((lv_obj_t *)lv_event_get_target(e));
+    lvgl_port_unlock();
+    settings->noteNamePalette = palette;
+    settings->saveSettings();
+    settings->removeCurrentMenu();
+}
+
+static void handleNoteColorWhiteSelected(lv_event_t *e) {
+    handleNoteColorSelected(e, LV_PALETTE_NONE);
+}
+
+static void handleNoteColorRedSelected(lv_event_t *e) {
+    handleNoteColorSelected(e, LV_PALETTE_RED);
+}
+
+static void handleNoteColorPinkSelected(lv_event_t *e) {
+    handleNoteColorSelected(e, LV_PALETTE_PINK);
+}
+
+static void handleNoteColorPurpleSelected(lv_event_t *e) {
+    handleNoteColorSelected(e, LV_PALETTE_PURPLE);
+}
+
+static void handleNoteColorBlueSelected(lv_event_t *e) {
+    handleNoteColorSelected(e, LV_PALETTE_LIGHT_BLUE);
+}
+
+static void handleNoteColorGreenSelected(lv_event_t *e) {
+    handleNoteColorSelected(e, LV_PALETTE_LIGHT_GREEN);
+}
+
+static void handleNoteColorOrangeSelected(lv_event_t *e) {
+    handleNoteColorSelected(e, LV_PALETTE_ORANGE);
+}
+
+static void handleNoteColorYellowSelected(lv_event_t *e) {
+    handleNoteColorSelected(e, LV_PALETTE_YELLOW);
+}
+
 
 static void handleRotationButtonClicked(lv_event_t *e) {
     ESP_LOGI("Settings", "Rotation button clicked");
@@ -645,7 +842,7 @@ static void handleRotationButtonClicked(lv_event_t *e) {
         handleRotationRightClicked,
         handleRotationUpsideDnClicked,
     };
-    settings->createMenu(buttonNames, callbackFunctions, 4);
+    settings->createMenu(buttonNames, NULL, NULL, callbackFunctions, 4);
 }
 
 static void handleRotationNormalClicked(lv_event_t *e) {
@@ -700,6 +897,17 @@ static void handleDebugButtonClicked(lv_event_t *e) {
     settings = (UserSettings *)lv_obj_get_user_data((lv_obj_t *)lv_event_get_target(e));
     lvgl_port_unlock();
 
+    const char *buttonNames[] = {
+        MENU_BTN_EXP_SMOOTHING,
+        MENU_BTN_1EU_BETA,
+        MENU_BTN_NAME_DEBOUNCING,
+    };
+    lv_event_cb_t callbackFunctions[] = {
+        handleExpSmoothingButtonClicked,
+        handle1EUBetaButtonClicked,
+        handleNameDebouncingButtonClicked,
+    };
+    settings->createMenu(buttonNames, NULL, NULL, callbackFunctions, 3);
 }
 
 static void handleExpSmoothingButtonClicked(lv_event_t *e) {
@@ -709,7 +917,7 @@ static void handleExpSmoothingButtonClicked(lv_event_t *e) {
     }
     settings = (UserSettings *)lv_obj_get_user_data((lv_obj_t *)lv_event_get_target(e));
     lvgl_port_unlock();
-
+    settings->createSpinbox(MENU_BTN_EXP_SMOOTHING, 0, 100, 3, 1, &settings->expSmoothing, 0.01);
 }
 
 static void handle1EUBetaButtonClicked(lv_event_t *e) {
@@ -719,7 +927,8 @@ static void handle1EUBetaButtonClicked(lv_event_t *e) {
     }
     settings = (UserSettings *)lv_obj_get_user_data((lv_obj_t *)lv_event_get_target(e));
     lvgl_port_unlock();
-
+    ESP_LOGI("Settings", "Opening 1EU Spinbox with %f", settings->oneEUBeta);
+    settings->createSpinbox(MENU_BTN_1EU_BETA, 0, 1000, 4, 1, &settings->oneEUBeta, 0.001);
 }
 
 static void handle1EUFilterFirstButtonClicked(lv_event_t *e) {
@@ -749,7 +958,7 @@ static void handleNameDebouncingButtonClicked(lv_event_t *e) {
     }
     settings = (UserSettings *)lv_obj_get_user_data((lv_obj_t *)lv_event_get_target(e));
     lvgl_port_unlock();
-
+    settings->createSpinbox(MENU_BTN_NAME_DEBOUNCING, 100, 500, 3, 3, &settings->noteDebounceInterval, 1);
 }
 
 static void handleAboutButtonClicked(lv_event_t *e) {
@@ -759,7 +968,63 @@ static void handleAboutButtonClicked(lv_event_t *e) {
     }
     settings = (UserSettings *)lv_obj_get_user_data((lv_obj_t *)lv_event_get_target(e));
     lvgl_port_unlock();
+    const char *buttonNames[] = {
+        "Version 0.0.1", // TODO: Grab the version from somewhere else
+        MENU_BTN_FACTORY_RESET,
+    };
+    lv_event_cb_t callbackFunctions[] = {
+        handleBackButtonClicked,
+        handleFactoryResetButtonClicked,
+    };
+    settings->createMenu(buttonNames, NULL, NULL, callbackFunctions, 2);
+}
 
+static void handleFactoryResetChickenOutConfirmed(lv_event_t *e) {
+    UserSettings *settings;
+    if (!lvgl_port_lock(0)) {
+        return;
+    }
+    lv_obj_t *mbox = (lv_obj_t *)lv_obj_get_user_data((lv_obj_t *)lv_event_get_target(e));
+    settings = (UserSettings *)lv_event_get_user_data(e);
+
+    // Handle factory reset logic here
+    ESP_LOGI("Settings", "Factory Reset initiated!");
+    settings->restoreDefaultSettings();
+
+    // Close the message box
+    lv_obj_del(mbox);
+
+    lvgl_port_unlock();
+}
+
+static void handleFactoryResetButtonClicked(lv_event_t *e) {
+    UserSettings *settings;
+    if (!lvgl_port_lock(0)) {
+        return;
+    }
+    settings = (UserSettings *)lv_obj_get_user_data((lv_obj_t *)lv_event_get_target(e));
+
+    lv_obj_t * mbox = lv_msgbox_create(lv_scr_act());
+    lv_obj_set_style_pad_all(mbox, 10, 0);           // Add padding for aesthetics
+    lv_msgbox_add_title(mbox, "Factory Reset");
+    lv_msgbox_add_text(mbox, "Reset to factory defaults?");
+    lv_obj_t *btn = lv_msgbox_add_footer_button(mbox, "Reset");
+    lv_obj_set_user_data(btn, mbox);
+    lv_obj_set_style_bg_color(btn, lv_palette_main(LV_PALETTE_RED), 0);
+    lv_obj_add_event_cb(btn, handleFactoryResetChickenOutConfirmed, LV_EVENT_CLICKED, settings);
+    btn = lv_msgbox_add_footer_button(mbox, "Cancel");
+    lv_obj_add_event_cb(btn, [](lv_event_t *e) {
+        if (!lvgl_port_lock(0)) {
+            return;
+        }
+        lv_obj_t *mbox = (lv_obj_t *)lv_event_get_user_data(e);
+        lv_obj_del(mbox); // closes the mbox
+        lvgl_port_unlock();
+    }, LV_EVENT_CLICKED, mbox);
+
+    lv_obj_center(mbox);
+
+    lvgl_port_unlock();
 }
 
 static void handleBackButtonClicked(lv_event_t *e) {
@@ -773,4 +1038,3 @@ static void handleBackButtonClicked(lv_event_t *e) {
     settings->saveSettings(); // TODO: Figure out a better way of doing this than saving every time
     settings->removeCurrentMenu();
 }
-

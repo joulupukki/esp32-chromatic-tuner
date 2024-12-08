@@ -129,10 +129,6 @@ lv_obj_t *main_screen = NULL;
 #define EU_FILTER_MIN_CUTOFF            0.5
 #define EU_FILTER_DERIVATIVE_CUTOFF     1
 
-// Exponential Smoother (not currently used)
-//#define SMOOTHING_AMOUNT                0.25 // should be a value between 0.0 and 1.0
-#define SMOOTHING_AMOUNT                0.10 // should be a value between 0.0 and 1.0
-
 #define A4_FREQ                         440.0
 #define CENTS_PER_SEMITONE              100
 
@@ -140,8 +136,6 @@ lv_obj_t *main_screen = NULL;
 #define PITCH_INDICATOR_BAR_WIDTH       8
 
 #define MAX_PITCH_NAME_LENGTH           4
-#define NOTE_NAME_UPDATE_TIMER_INTERVAL 100 // milliseconds to debounce setting the note label
-                                            // to keep LVGL happy without overloading it.
 using namespace cycfi::q::pitch_names;
 using frequency = cycfi::q::frequency;
 using pitch = cycfi::q::pitch;
@@ -154,7 +148,7 @@ static adc_channel_t channel[1] = {ADC_CHANNEL_7}; // ESP32-CYD - GPIO 35 (ADC1_
 static TaskHandle_t s_task_handle;
 static const char *TAG = "TUNER";
 
-ExponentialSmoother smoother(SMOOTHING_AMOUNT);
+ExponentialSmoother smoother(0.1); // This is replaced by a user setting
 float current_frequency = -1.0f;
 
 // 1EU Filter Initialization Params
@@ -239,6 +233,14 @@ void create_labels(lv_obj_t * parent) {
     lv_style_init(&note_name_label_style);    
     // lv_style_set_text_font(&note_name_label_style, &lv_font_montserrat_48);
     lv_style_set_text_font(&note_name_label_style, &raleway_128);
+    
+    lv_palette_t palette = userSettings->noteNamePalette;
+    if (palette == LV_PALETTE_NONE) {
+        lv_style_set_text_color(&note_name_label_style, lv_color_white());
+    } else {
+        lv_style_set_text_color(&note_name_label_style, lv_palette_main(palette));
+    }
+
     lv_obj_add_style(note_name_label, &note_name_label_style, 0);
 
     lv_obj_align(note_name_label, LV_ALIGN_CENTER, 0, 20); // Offset down by 20 pixels
@@ -393,12 +395,12 @@ void update_note_name(const char *new_value) {
     // set too often for LVGL. ADC makes it run SUPER
     // fast and can crash the software.
     lv_timer_set_user_data(note_name_update_timer, (void *)new_value);
+    lv_timer_set_period(note_name_update_timer, (uint32_t)userSettings->noteDebounceInterval);
     lv_timer_reset(note_name_update_timer);
     lv_timer_resume(note_name_update_timer);
 }
 
 void display_pitch(float frequency, const char *noteName, float cents) {
-    return;
     if (noteName != NULL) {
         lv_label_set_text_fmt(frequency_label, "%.2f", frequency);
         lv_obj_clear_flag(frequency_label, LV_OBJ_FLAG_HIDDEN);
@@ -508,7 +510,7 @@ static esp_err_t app_lvgl_main() {
 
     // Create a new timer that will fire. This will
     // debounce the calls to the UI to update the note name.
-    note_name_update_timer = lv_timer_create(set_note_name_cb, NOTE_NAME_UPDATE_TIMER_INTERVAL, NULL);
+    note_name_update_timer = lv_timer_create(set_note_name_cb, userSettings->noteDebounceInterval, NULL);
     lv_timer_pause(note_name_update_timer);
     lv_timer_reset(note_name_update_timer);
 
@@ -521,10 +523,29 @@ static esp_err_t app_lvgl_main() {
     return ESP_OK;
 }
 
+void user_settings_changed() {
+    ESP_LOGI(TAG, "User settings changed");
+    if (!lvgl_port_lock(0)) {
+        return;
+    }
+
+    lv_palette_t palette = userSettings->noteNamePalette;
+    if (palette == LV_PALETTE_NONE) {
+        lv_obj_set_style_text_color(note_name_label, lv_color_white(), 0);
+    } else {
+        lv_obj_set_style_text_color(note_name_label, lv_palette_main(palette), 0);
+    }
+
+    lvgl_port_unlock();
+
+    oneEUFilter.setBeta(userSettings->oneEUBeta);
+    smoother.setAmount(userSettings->expSmoothing);
+}
+
 extern "C" void app_main() {
 
     // Initialize NVS (Persistent Flash Storage for User Settings)
-    userSettings = new UserSettings();
+    userSettings = new UserSettings(user_settings_changed);
 
     // Start the Display Task
     xTaskCreatePinnedToCore(
@@ -661,8 +682,6 @@ static void readAndDetectTask(void *pvParameter) {
     };
     ESP_ERROR_CHECK(adc_continuous_register_event_callbacks(handle, &cbs, NULL));
     ESP_ERROR_CHECK(adc_continuous_start(handle));
-
-    oneEUFilter.setBeta(userSettings->oneEUBeta);
 
     // adc_ll_digi_set_convert_limit_num(2); // potential hack for the ESP32 ADC bug
 
