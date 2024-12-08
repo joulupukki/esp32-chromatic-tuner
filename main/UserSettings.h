@@ -4,6 +4,8 @@
 
     Distributed under the MIT License [ https://opensource.org/licenses/MIT ]
 =============================================================================*/
+#if !defined(TUNER_USER_SETTINGS)
+#define TUNER_USER_SETTINGS
 
 #include <vector>
 #include <cstdint>
@@ -21,15 +23,7 @@ extern "C" { // because these files are C and not C++
 #include "nvs_flash.h"
 #include "nvs.h"
 
-#define DEFAULT_IN_TUNE_CENTS_WIDTH     ((uint8_t) 2)
-#define DEFAULT_NOTE_NAME_PALETTE       ((lv_palette_t) LV_PALETTE_NONE)
-#define DEFAULT_DISPLAY_ORIENTATION     ((TunerOrientation) orientationNormal);
-#define DEFAULT_EXP_SMOOTHING           ((float) 0.09)
-#define DEFAULT_ONE_EU_BETA             ((float) 0.003)
-#define DEFAULT_NOTE_DEBOUNCE_INTERVAL  ((float) 115.0)
-#define DEFAULT_USE_1EU_FILTER_FIRST    (true)
-// #define DEFAULT_MOVING_AVG_WINDOW       ((float) 100)
-#define DEFAULT_DISPLAY_BRIGHTNESS      ((float) 0.75)
+#include "defines.h"
 
 enum TunerOrientation: uint8_t {
     orientationNormal,
@@ -168,3 +162,5 @@ static void handleFactoryResetButtonClicked(lv_event_t *e);
 
 static void handleBackButtonClicked(lv_event_t *e);
 static void handleExitButtonClicked(lv_event_t *e);
+
+#endif

@@ -1,11 +1,11 @@
 # ESP32 Heltec
-# idf_component_register(SRCS "globals.cpp" "fontawesome_48.c" "UserSettings.cpp" "raleway_128.c" "OneEuroFilter.cpp" "main.cpp"
+# idf_component_register(SRCS "tuner_gui_task.cpp" "pitch_detector.cpp" "globals.cpp" "fontawesome_48.c" "UserSettings.cpp" "raleway_128.c" "OneEuroFilter.cpp" "main.cpp"
 #                     INCLUDE_DIRS "."
 #                     REQUIRES esp_lcd driver esp_adc
 #                     )
 
 # ESP32-CYD
-idf_component_register(SRCS "lcd.c" "touch.c" "OneEuroFilter.cpp" "raleway_128.c" "globals.cpp" "UserSettings.cpp" "fontawesome_48.c" "main.cpp"
+idf_component_register(SRCS "lcd.c" "touch.c" "OneEuroFilter.cpp" "raleway_128.c" "globals.cpp" "UserSettings.cpp" "fontawesome_48.c" "pitch_detector_task.cpp" "tuner_gui_task.cpp" "main.cpp"
                     INCLUDE_DIRS "."
 #                    REQUIRES esp_lcd driver esp_adc hal
                     REQUIRES esp_lcd driver esp_adc nvs_flash

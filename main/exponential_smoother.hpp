@@ -3,6 +3,9 @@
 
     Distributed under the MIT License [ https://opensource.org/licenses/MIT ]
 =============================================================================*/
+#if !defined(TUNER_EXPONENTIAL_SMOOTHER)
+#define TUNER_EXPONENTIAL_SMOOTHER
+
 #include <vector>
 #include <algorithm>
 
@@ -39,3 +42,5 @@ private:
     std::vector<float> values;
     float amount;
 };
+
+#endif
