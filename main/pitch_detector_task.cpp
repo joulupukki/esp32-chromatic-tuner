@@ -5,6 +5,7 @@
 =============================================================================*/
 #include "pitch_detector_task.h"
 
+#include "defines.h"
 #include "globals.h"
 #include "UserSettings.h"
 

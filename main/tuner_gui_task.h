@@ -6,9 +6,9 @@
     This is the pitch detection task, run on Core 1 of the ESP32.
 =============================================================================*/
 
-#if !defined(TUNER_PITCH_DETECTOR_TASK)
-#define TUNER_PITCH_DETECTOR_TASK
+#if !defined(TUNER_GUI_TASK)
+#define TUNER_GUI_TASK
 
-void update_pitch_detector_user_settings();
+void update_tuner_user_settings();
 
 #endif
