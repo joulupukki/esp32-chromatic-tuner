@@ -26,6 +26,7 @@
 #define MENU_BTN_NAME_DEBOUNCING    "Name Debouncing"
 
 #define MENU_BTN_ABOUT              "About"
+    #define MENU_BTN_FACTORY_RESET      "Factory Reset"
 
 #define MENU_BTN_BACK               "Back"
 #define MENU_BTN_EXIT               "Exit"
@@ -131,21 +132,6 @@ void UserSettings::loadSettings() {
     }
 }
 
-void UserSettings::restoreDefaultSettings() {
-    inTuneCentsWidth = DEFAULT_IN_TUNE_CENTS_WIDTH;
-    noteNamePalette = DEFAULT_NOTE_NAME_PALETTE;
-    displayOrientation = DEFAULT_DISPLAY_ORIENTATION;
-    expSmoothing = DEFAULT_EXP_SMOOTHING;
-    oneEUBeta = DEFAULT_ONE_EU_BETA;
-    noteDebounceInterval = DEFAULT_NOTE_DEBOUNCE_INTERVAL;
-    displayBrightness = DEFAULT_DISPLAY_BRIGHTNESS;
-
-    saveSettings();
-
-    // Reboot!
-    esp_restart();
-}
-
 //
 // PUBLIC Methods
 //
@@ -182,6 +168,21 @@ void UserSettings::saveSettings() {
     nvs_commit(nvsHandle);
 
     settingsChangedCallback();
+}
+
+void UserSettings::restoreDefaultSettings() {
+    inTuneCentsWidth = DEFAULT_IN_TUNE_CENTS_WIDTH;
+    noteNamePalette = DEFAULT_NOTE_NAME_PALETTE;
+    displayOrientation = DEFAULT_DISPLAY_ORIENTATION;
+    expSmoothing = DEFAULT_EXP_SMOOTHING;
+    oneEUBeta = DEFAULT_ONE_EU_BETA;
+    noteDebounceInterval = DEFAULT_NOTE_DEBOUNCE_INTERVAL;
+    displayBrightness = DEFAULT_DISPLAY_BRIGHTNESS;
+
+    saveSettings();
+
+    // Reboot!
+    esp_restart();
 }
 
 lv_display_rotation_t UserSettings::getDisplayOrientation() {
@@ -967,7 +968,63 @@ static void handleAboutButtonClicked(lv_event_t *e) {
     }
     settings = (UserSettings *)lv_obj_get_user_data((lv_obj_t *)lv_event_get_target(e));
     lvgl_port_unlock();
+    const char *buttonNames[] = {
+        "Version 0.0.1", // TODO: Grab the version from somewhere else
+        MENU_BTN_FACTORY_RESET,
+    };
+    lv_event_cb_t callbackFunctions[] = {
+        handleBackButtonClicked,
+        handleFactoryResetButtonClicked,
+    };
+    settings->createMenu(buttonNames, NULL, NULL, callbackFunctions, 2);
+}
 
+static void handleFactoryResetChickenOutConfirmed(lv_event_t *e) {
+    UserSettings *settings;
+    if (!lvgl_port_lock(0)) {
+        return;
+    }
+    lv_obj_t *mbox = (lv_obj_t *)lv_obj_get_user_data((lv_obj_t *)lv_event_get_target(e));
+    settings = (UserSettings *)lv_event_get_user_data(e);
+
+    // Handle factory reset logic here
+    ESP_LOGI("Settings", "Factory Reset initiated!");
+    settings->restoreDefaultSettings();
+
+    // Close the message box
+    lv_obj_del(mbox);
+
+    lvgl_port_unlock();
+}
+
+static void handleFactoryResetButtonClicked(lv_event_t *e) {
+    UserSettings *settings;
+    if (!lvgl_port_lock(0)) {
+        return;
+    }
+    settings = (UserSettings *)lv_obj_get_user_data((lv_obj_t *)lv_event_get_target(e));
+
+    lv_obj_t * mbox = lv_msgbox_create(lv_scr_act());
+    lv_obj_set_style_pad_all(mbox, 10, 0);           // Add padding for aesthetics
+    lv_msgbox_add_title(mbox, "Factory Reset");
+    lv_msgbox_add_text(mbox, "Reset to factory defaults?");
+    lv_obj_t *btn = lv_msgbox_add_footer_button(mbox, "Reset");
+    lv_obj_set_user_data(btn, mbox);
+    lv_obj_set_style_bg_color(btn, lv_palette_main(LV_PALETTE_RED), 0);
+    lv_obj_add_event_cb(btn, handleFactoryResetChickenOutConfirmed, LV_EVENT_CLICKED, settings);
+    btn = lv_msgbox_add_footer_button(mbox, "Cancel");
+    lv_obj_add_event_cb(btn, [](lv_event_t *e) {
+        if (!lvgl_port_lock(0)) {
+            return;
+        }
+        lv_obj_t *mbox = (lv_obj_t *)lv_event_get_user_data(e);
+        lv_obj_del(mbox); // closes the mbox
+        lvgl_port_unlock();
+    }, LV_EVENT_CLICKED, mbox);
+
+    lv_obj_center(mbox);
+
+    lvgl_port_unlock();
 }
 
 static void handleBackButtonClicked(lv_event_t *e) {

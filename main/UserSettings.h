@@ -60,7 +60,6 @@ class UserSettings {
      */
     void loadSettings();
 
-    void restoreDefaultSettings();
 public:
     bool isShowingMenu = false;
 
@@ -84,6 +83,8 @@ public:
      */
     void saveSettings();
 
+    void restoreDefaultSettings();
+    
     /**
      * @brief Get the user setting for display orientation.
      */
@@ -149,6 +150,9 @@ static void handle1EUBetaButtonClicked(lv_event_t *e);
 static void handle1EUFilterFirstButtonClicked(lv_event_t *e);
 static void handleMovingAvgButtonClicked(lv_event_t *e);
 static void handleNameDebouncingButtonClicked(lv_event_t *e);
+
 static void handleAboutButtonClicked(lv_event_t *e);
+static void handleFactoryResetButtonClicked(lv_event_t *e);
+
 static void handleBackButtonClicked(lv_event_t *e);
 static void handleExitButtonClicked(lv_event_t *e);
