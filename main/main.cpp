@@ -769,7 +769,7 @@ static void readAndDetectTask(void *pvParameter) {
                     // NOT work. They probably just need to be tweaked a little.
 
                     // Signal Conditioner
-                    // s = sig_cond(s);
+                    s = sig_cond(s);
 
                     // // Bandpass filter
                     // s = lp(s);
