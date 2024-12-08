@@ -138,6 +138,12 @@ void UserSettings::loadSettings() {
     }
 }
 
+void UserSettings::setIsShowingSettings(bool isShowing) {
+    portENTER_CRITICAL(&isShowingMenu_mutex);
+    isShowingMenu = isShowing;
+    portEXIT_CRITICAL(&isShowingMenu_mutex);
+}
+
 //
 // PUBLIC Methods
 //
@@ -145,6 +151,14 @@ void UserSettings::loadSettings() {
 UserSettings::UserSettings(settings_changed_cb_t callback) {
     settingsChangedCallback = callback;
     loadSettings();
+}
+
+bool UserSettings::isShowingSettings() {
+    bool isShowing = false;
+    portENTER_CRITICAL(&isShowingMenu_mutex);
+    isShowing = isShowingMenu;
+    portEXIT_CRITICAL(&isShowingMenu_mutex);
+    return isShowing;
 }
 
 void UserSettings::saveSettings() {
@@ -219,7 +233,7 @@ void UserSettings::setDisplayAndScreen(lv_display_t *display, lv_obj_t *screen) 
 }
 
 void UserSettings::showSettings() {
-    isShowingMenu = true;
+    setIsShowingSettings(true);
     const char *symbolNames[] = {
         LV_SYMBOL_HOME,
         LV_SYMBOL_IMAGE,
@@ -567,7 +581,7 @@ void UserSettings::exitSettings() {
     }
 
     lvgl_port_unlock();
-    isShowingMenu = false;
+    setIsShowingSettings(false);
 }
 
 void UserSettings::rotateScreenTo(TunerOrientation newRotation) {

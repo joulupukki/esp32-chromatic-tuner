@@ -12,6 +12,7 @@
 #include "lvgl.h"
 #include "esp_lvgl_port.h"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
 
 extern "C" { // because these files are C and not C++
     #include "lcd.h"
@@ -54,17 +55,18 @@ class UserSettings {
     lv_display_t *lvglDisplay;
 
     nvs_handle_t    nvsHandle;
+    bool isShowingMenu = false;
 
     settings_changed_cb_t settingsChangedCallback;
 
-    /**
-     * @brief Loads settings from persistent storage.
-     */
+    /// @brief Loads settings from persistent storage.
     void loadSettings();
 
-public:
-    bool isShowingMenu = false;
+    /// @brief Set whether the menu is showing (thread safe).
+    /// @param isShowing 
+    void setIsShowingSettings(bool isShowing);
 
+public:
     // User Setting Variables
     uint8_t             inTuneCentsWidth        = DEFAULT_IN_TUNE_CENTS_WIDTH;
     lv_palette_t        noteNamePalette         = DEFAULT_NOTE_NAME_PALETTE;
@@ -82,6 +84,11 @@ public:
      * @param mainScreen The LVGL main screen in the app.
      */
     UserSettings(settings_changed_cb_t callback);
+
+    /// @brief Know if the settings menu is being shown (thread safe).
+    /// @return Returns `true` if the settings menu is currently showing.
+    bool isShowingSettings();
+    portMUX_TYPE isShowingMenu_mutex = portMUX_INITIALIZER_UNLOCKED;
 
     /**
      * @brief Saves settings to persistent storage.

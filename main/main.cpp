@@ -13,6 +13,7 @@
 #include "OneEuroFilter.h"
 // #include "MovingAverage.hpp"
 
+#include "globals.h"
 #include "UserSettings.h"
 
 //
@@ -21,7 +22,7 @@
 #include <q/pitch/pitch_detector.hpp>
 #include <q/fx/dynamic.hpp>
 #include <q/fx/clip.hpp>
-#include <q/fx/signal_conditioner.hpp>
+// #include <q/fx/signal_conditioner.hpp>
 #include <q/support/decibel.hpp>
 #include <q/support/duration.hpp>
 #include <q/support/literals.hpp>
@@ -65,16 +66,7 @@ GPIO 27 - Momentary foot switch input
 */
 
 UserSettings *userSettings = NULL;
-bool is_ui_initialized = false;
 
-typedef enum {
-    SCREEN_STANDBY = 0,
-    SCREEN_TUNING,
-    SCREEN_MENU_TOP,
-    SCREEN_MENU_TUNING,
-} tuner_screen_t;
-
-tuner_screen_t current_screen = SCREEN_STANDBY;
 lv_obj_t *main_screen = NULL;
 
 //
@@ -102,6 +94,7 @@ lv_obj_t *main_screen = NULL;
 #define TUNER_ADC_BUFFER_POOL_SIZE      4096
 #define TUNER_ADC_SAMPLE_RATE           (48 * 1000) // 48kHz
 
+/// @brief This factor is used to correct the incoming frequency readings on ESP32-WROOM-32 (which CYD is). This same weird behavior does not happen on ESP32-S2 or ESP32-S3.
 #define WEIRD_ESP32_WROOM_32_FREQ_FIX_FACTOR    1.2222222223 // 11/9 but using 11/9 gives completely incorrect results. Weird.
 
 // HELTEC @ 20kHz
@@ -119,7 +112,8 @@ lv_obj_t *main_screen = NULL;
 // the frequency. This should help cut down on the noise from the
 // OLED and only attempt to read frequency information when an
 // actual input signal is being read.
-#define TUNER_READING_DIFF_MINIMUM      400 // TODO: Convert this into a debug setting
+// #define TUNER_READING_DIFF_MINIMUM      400 // TODO: Convert this into a debug setting
+#define TUNER_READING_DIFF_MINIMUM      300 // TODO: Convert this into a debug setting
 
 //
 // Smoothing
@@ -141,16 +135,15 @@ using namespace cycfi::q::pitch_names;
 using frequency = cycfi::q::frequency;
 using pitch = cycfi::q::pitch;
 CONSTEXPR frequency low_fs = cycfi::q::pitch_names::C[1];
-CONSTEXPR frequency high_fs = cycfi::q::pitch_names::C[7]; // Helps to catch the high harmonics
+CONSTEXPR frequency high_fs = cycfi::q::pitch_names::C[7]; // Setting this higher helps to catch the high harmonics
 
-static adc_channel_t channel[1] = {ADC_CHANNEL_7}; // ESP32-CYD - GPIO 35 (ADC1_CH7)
-// static adc_channel_t channel[1] = {ADC_CHANNEL_4}; // ESP32 - Heltec
+static adc_channel_t channel[1] = {ADC_CHANNEL_7}; // ESP32-WROOM-32 CYD - GPIO 35 (ADC1_CH7)
+// static adc_channel_t channel[1] = {ADC_CHANNEL_4}; // ESP32-S3 - Heltec
 
 static TaskHandle_t s_task_handle;
 static const char *TAG = "TUNER";
 
 ExponentialSmoother smoother(0.1); // This is replaced by a user setting
-float current_frequency = -1.0f;
 
 // 1EU Filter Initialization Params
 static const double euFilterFreq = EU_FILTER_ESTIMATED_FREQ; // I believe this means no guess as to what the incoming frequency will initially be
@@ -373,7 +366,7 @@ void create_ruler(lv_obj_t * parent) {
 
 // This function is for debug and will just show the frequency and nothing else
 const char *lastDisplayedNote = no_freq_name;
-char noteNameBuffer[MAX_PITCH_NAME_LENGTH];
+// char noteNameBuffer[MAX_PITCH_NAME_LENGTH];
 
 void set_note_name_cb(lv_timer_t * timer) {
     // The note name is in the timer's user data
@@ -382,9 +375,7 @@ void set_note_name_cb(lv_timer_t * timer) {
         return;
     }
     const char *note_string = (const char *)lv_timer_get_user_data(timer);
-    memset(noteNameBuffer, '\0', MAX_PITCH_NAME_LENGTH);
-    snprintf(noteNameBuffer, MAX_PITCH_NAME_LENGTH, "%s", note_string);
-    lv_label_set_text_static(note_name_label, (const char *)noteNameBuffer);
+    lv_label_set_text_static(note_name_label, note_string);
 
     lv_timer_pause(timer);
 
@@ -615,12 +606,12 @@ static void oledTask(void *pvParameter) {
         lv_task_handler();
 
         // Lock the mutex due to the LVGL APIs are not thread-safe
-        if (userSettings != NULL && !userSettings->isShowingMenu && lvgl_port_lock(0)) {
-            // display_frequency(current_frequency);
-            if (current_frequency > 0) {
-                const char *noteName = get_pitch_name_and_cents_from_frequency(current_frequency, &cents);
+        if (userSettings != NULL && !userSettings->isShowingSettings() && lvgl_port_lock(0)) {
+            float frequency = get_current_frequency();
+            if (frequency > 0) {
+                const char *noteName = get_pitch_name_and_cents_from_frequency(frequency, &cents);
                 // ESP_LOGI(TAG, "%s - %d", noteName, cents);
-                display_pitch(current_frequency, noteName, cents);
+                display_pitch(frequency, noteName, cents);
             } else {
                 display_pitch(0, NULL, 0);
             }
@@ -675,8 +666,8 @@ static void readAndDetectTask(void *pvParameter) {
     // float                       release_threshold = lin_float(-60_dB);
     // float                       threshold = onset_threshold;
 
-    auto sc_conf = q::signal_conditioner::config{};
-    auto sig_cond = q::signal_conditioner{sc_conf, low_fs, high_fs, TUNER_ADC_SAMPLE_RATE};
+    // auto sc_conf = q::signal_conditioner::config{};
+    // auto sig_cond = q::signal_conditioner{sc_conf, low_fs, high_fs, TUNER_ADC_SAMPLE_RATE};
 
     s_task_handle = xTaskGetCurrentTaskHandle();
     
@@ -703,7 +694,7 @@ static void readAndDetectTask(void *pvParameter) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
         while (1) {
-            if (userSettings == NULL || userSettings->isShowingMenu) {
+            if (userSettings == NULL || userSettings->isShowingSettings()) {
                 // Don't read the signal when the settings menu is showing.
                 vTaskDelay(pdMS_TO_TICKS(500));
                 continue;
@@ -741,7 +732,7 @@ static void readAndDetectTask(void *pvParameter) {
                 // Bail out if the input does not meet the minimum criteria
                 float range = maxVal - minVal;
                 if (range < TUNER_READING_DIFF_MINIMUM) {
-                    current_frequency = -1; // Indicate to the UI that there's no frequency available
+                    set_current_frequency(-1); // Indicate to the UI that there's no frequency available
                     oneEUFilter.reset(); // Reset the 1EU filter so the next frequency it detects will be as fast as possible
                     smoother.reset();
                     // movingAverage.reset();
@@ -769,7 +760,7 @@ static void readAndDetectTask(void *pvParameter) {
                     // NOT work. They probably just need to be tweaked a little.
 
                     // Signal Conditioner
-                    s = sig_cond(s);
+                    // s = sig_cond(s);
 
                     // // Bandpass filter
                     // s = lp(s);
@@ -803,7 +794,7 @@ static void readAndDetectTask(void *pvParameter) {
                         bool use1EUFilterFirst = true; // TODO: This may never be needed. Need to test which "feels" better for tuning
                         if (use1EUFilterFirst) {
                             // 1EU Filtering
-                            f = (float)oneEUFilter.filter((double)f, (TimeStamp)time_seconds); // Stores the current frequency in the global current_frequency variable
+                            f = (float)oneEUFilter.filter((double)f, (TimeStamp)time_seconds);
 
                             // Simple Exponential Smoothing
                             f = smoother.smooth(f);
@@ -812,13 +803,13 @@ static void readAndDetectTask(void *pvParameter) {
                             f = smoother.smooth(f);
 
                             // 1EU Filtering
-                            f = (float)oneEUFilter.filter((double)f, (TimeStamp)time_seconds); // Stores the current frequency in the global current_frequency variable
+                            f = (float)oneEUFilter.filter((double)f, (TimeStamp)time_seconds);
                         }
 
                         // Moving average (makes it BAD!)
                         // f = movingAverage.addValue(f);
-
-                        current_frequency = f / WEIRD_ESP32_WROOM_32_FREQ_FIX_FACTOR;
+                        f = f / WEIRD_ESP32_WROOM_32_FREQ_FIX_FACTOR; // Use the weird factor only on ESP32-WROOM-32 (which the CYD is)
+                        set_current_frequency(f);
                     }
                 }
 
