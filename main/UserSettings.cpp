@@ -38,6 +38,8 @@
 #define SETTING_KEY_EXP_SMOOTHING           "exp_smoothing"
 #define SETTING_KEY_ONE_EU_BETA             "one_eu_beta"
 #define SETTING_KEY_NOTE_DEBOUNCE_INTERVAL  "note_debounce"
+#define SETTING_KEY_USE_1EU_FILTER_FIRST    "oneEUFilter1st"
+// #define SETTING_KEY_MOVING_AVG_WINDOW_SIZE  "movingAvgWindow"
 #define SETTING_KEY_DISPLAY_BRIGHTNESS      "disp_brightness"
 
 /*
@@ -45,38 +47,30 @@
 SETTINGS
     Tuning
         [X] In Tune Width
-            Show a slider and allow the user to choose integer values between 1 and 10. Save the setting into "user_in_tune_cents_width"
         [x] Back - returns to the main menu
 
     Display Settings
         [x] Brightness
-            Show a slider and show values between 10 and 100. Save to a setting named "user_display_brightness" as a float value between 0.1 and 1.0
         [x] Note Color
-            Show a color picker and save setting to a variable named "user_note_name_color"
         [x] Rotation
-            Allow the user to choose between: Normal, Upside Down, Left, or Right. Save the setting into "user_rotation_mode"
         [x] Back - returns to the main menu
 
     Debug
         [x] Exp Smoothing
-            Allow the user to use a slider to choose a float value between 0.0 and 1.0. Show only 1 decimal after the decimal point. Save the setting into "user_exp_smoothing"
         [x] 1EU Beta
-            Allow the user to use a slider to choose a float value between 0.000 and 2.000 allowing up to 3 decimal places of granularity. Save the setting into "user_1eu_beta"
         [x] Note Debouncing
-            Allow the user to use a slider to choose an integer value between 100 and 400. Save this setting into "user_note_debounce_interval"
+        [x] Moving Average Window Size
         [x] Back - returns to the main menu
 
     About
-        [ ] Show version information
+        [x] Show version information
         [ ] Acknowledgements
-        [ ] Restore Factory Defaults
-            [ ] Confirmation Yes/No
-        [ ] Back
+        [x] Restore Factory Defaults
+            [x] Confirmation Yes/No
+        [x] Back
         
-    Exit -> Selecting this menu exits the settings menu
+    Exit
 */
-
-
 
 //
 // PRIVATE Methods
@@ -87,6 +81,7 @@ void UserSettings::loadSettings() {
     nvs_open("settings", NVS_READWRITE, &nvsHandle);
 
     uint8_t value;
+    uint32_t value32;
 
     if (nvs_get_u8(nvsHandle, SETTING_KEY_IN_TUNE_WIDTH, &value) == ESP_OK) {
         inTuneCentsWidth = value;
@@ -105,7 +100,6 @@ void UserSettings::loadSettings() {
     } else {
         displayOrientation = DEFAULT_DISPLAY_ORIENTATION;
     }
-    ESP_LOGI("Settings", "Loaded display orientation of: %d", displayOrientation);
 
     if (nvs_get_u8(nvsHandle, SETTING_KEY_EXP_SMOOTHING, &value) == ESP_OK) {
         expSmoothing = ((float)value) * 0.01;
@@ -113,8 +107,8 @@ void UserSettings::loadSettings() {
         expSmoothing = DEFAULT_EXP_SMOOTHING;
     }
 
-    if (nvs_get_u8(nvsHandle, SETTING_KEY_ONE_EU_BETA, &value) == ESP_OK) {
-        oneEUBeta = ((float)value) * 0.001;
+    if (nvs_get_u32(nvsHandle, SETTING_KEY_ONE_EU_BETA, &value32) == ESP_OK) {
+        oneEUBeta = ((float)value32) * 0.001;
     } else {
         oneEUBeta = DEFAULT_ONE_EU_BETA;
     }
@@ -124,6 +118,18 @@ void UserSettings::loadSettings() {
     } else {
         noteDebounceInterval = DEFAULT_NOTE_DEBOUNCE_INTERVAL;
     }
+
+    if (nvs_get_u8(nvsHandle, SETTING_KEY_USE_1EU_FILTER_FIRST, &value) == ESP_OK) {
+        use1EUFilterFirst = (bool)value;
+    } else {
+        use1EUFilterFirst = DEFAULT_USE_1EU_FILTER_FIRST;
+    }
+
+    // if (nvs_get_u32(nvsHandle, SETTING_KEY_MOVING_AVG_WINDOW_SIZE, &value32) == ESP_OK) {
+    //     movingAvgWindow = (float)value32;
+    // } else {
+    //     movingAvgWindow = DEFAULT_MOVING_AVG_WINDOW;
+    // }
 
     if (nvs_get_u8(nvsHandle, SETTING_KEY_DISPLAY_BRIGHTNESS, &value) == ESP_OK) {
         displayBrightness = ((float)value) * 0.01;
@@ -143,6 +149,7 @@ UserSettings::UserSettings(settings_changed_cb_t callback) {
 
 void UserSettings::saveSettings() {
     uint8_t value;
+    uint32_t value32;
 
     value = inTuneCentsWidth;
     nvs_set_u8(nvsHandle, SETTING_KEY_IN_TUNE_WIDTH, value);
@@ -156,11 +163,17 @@ void UserSettings::saveSettings() {
     value = (uint8_t)(expSmoothing * 100);
     nvs_set_u8(nvsHandle, SETTING_KEY_EXP_SMOOTHING, value);
 
-    value = (uint8_t)(oneEUBeta * 1000);
-    nvs_set_u8(nvsHandle, SETTING_KEY_ONE_EU_BETA, value);
+    value32 = (uint32_t)(oneEUBeta * 1000);
+    nvs_set_u32(nvsHandle, SETTING_KEY_ONE_EU_BETA, value32);
 
     value = (uint8_t)noteDebounceInterval;
     nvs_set_u8(nvsHandle, SETTING_KEY_NOTE_DEBOUNCE_INTERVAL, value);
+
+    value = (uint8_t)use1EUFilterFirst;
+    nvs_set_u8(nvsHandle, SETTING_KEY_USE_1EU_FILTER_FIRST, value);
+
+    // value32 = (uint32_t)movingAvgWindow;
+    // nvs_set_u32(nvsHandle, SETTING_KEY_MOVING_AVG_WINDOW_SIZE, value32);
 
     value = (uint8_t)(displayBrightness * 100);
     nvs_set_u8(nvsHandle, SETTING_KEY_DISPLAY_BRIGHTNESS, value);
@@ -177,6 +190,8 @@ void UserSettings::restoreDefaultSettings() {
     expSmoothing = DEFAULT_EXP_SMOOTHING;
     oneEUBeta = DEFAULT_ONE_EU_BETA;
     noteDebounceInterval = DEFAULT_NOTE_DEBOUNCE_INTERVAL;
+    use1EUFilterFirst = DEFAULT_USE_1EU_FILTER_FIRST;
+    // movingAvgWindow = DEFAULT_MOVING_AVG_WINDOW;
     displayBrightness = DEFAULT_DISPLAY_BRIGHTNESS;
 
     saveSettings();
@@ -901,11 +916,13 @@ static void handleDebugButtonClicked(lv_event_t *e) {
         MENU_BTN_EXP_SMOOTHING,
         MENU_BTN_1EU_BETA,
         MENU_BTN_NAME_DEBOUNCING,
+        // MENU_BTN_MOVING_AVG,
     };
     lv_event_cb_t callbackFunctions[] = {
         handleExpSmoothingButtonClicked,
         handle1EUBetaButtonClicked,
         handleNameDebouncingButtonClicked,
+        // handleMovingAvgButtonClicked,
     };
     settings->createMenu(buttonNames, NULL, NULL, callbackFunctions, 3);
 }
@@ -941,15 +958,15 @@ static void handle1EUFilterFirstButtonClicked(lv_event_t *e) {
 
 }
 
-static void handleMovingAvgButtonClicked(lv_event_t *e) {
-    UserSettings *settings;
-    if (!lvgl_port_lock(0)) {
-        return;
-    }
-    settings = (UserSettings *)lv_obj_get_user_data((lv_obj_t *)lv_event_get_target(e));
-    lvgl_port_unlock();
-
-}
+// static void handleMovingAvgButtonClicked(lv_event_t *e) {
+//     UserSettings *settings;
+//     if (!lvgl_port_lock(0)) {
+//         return;
+//     }
+//     settings = (UserSettings *)lv_obj_get_user_data((lv_obj_t *)lv_event_get_target(e));
+//     lvgl_port_unlock();
+//     settings->createSpinbox(MENU_BTN_MOVING_AVG, 1, 1000, 4, 4, &settings->movingAvgWindow, 1);
+// }
 
 static void handleNameDebouncingButtonClicked(lv_event_t *e) {
     UserSettings *settings;

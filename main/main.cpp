@@ -11,6 +11,7 @@
 
 #include "exponential_smoother.hpp"
 #include "OneEuroFilter.h"
+// #include "MovingAverage.hpp"
 
 #include "UserSettings.h"
 
@@ -156,7 +157,8 @@ static const double euFilterFreq = EU_FILTER_ESTIMATED_FREQ; // I believe this m
 static const double mincutoff = EU_FILTER_MIN_CUTOFF;
 static const double dcutoff = EU_FILTER_DERIVATIVE_CUTOFF;
 
-OneEuroFilter oneEUFilter(euFilterFreq, mincutoff, 0.05, dcutoff); // TODO: Use the default beta instead of hard-coded one
+OneEuroFilter oneEUFilter(euFilterFreq, mincutoff, DEFAULT_ONE_EU_BETA, dcutoff);
+// MovingAverage movingAverage(DEFAULT_MOVING_AVG_WINDOW);
 
 static lv_obj_t *note_name_label;
 lv_style_t note_name_label_style;
@@ -231,7 +233,6 @@ void create_labels(lv_obj_t * parent) {
     lv_obj_align(note_name_label, LV_ALIGN_CENTER, 0, 0);
 
     lv_style_init(&note_name_label_style);    
-    // lv_style_set_text_font(&note_name_label_style, &lv_font_montserrat_48);
     lv_style_set_text_font(&note_name_label_style, &raleway_128);
     
     lv_palette_t palette = userSettings->noteNamePalette;
@@ -376,8 +377,10 @@ char noteNameBuffer[MAX_PITCH_NAME_LENGTH];
 
 void set_note_name_cb(lv_timer_t * timer) {
     // The note name is in the timer's user data
-    ESP_LOGI("LOCK", "locking in set_note_name_cb");
-    lvgl_port_lock(0);
+    // ESP_LOGI("LOCK", "locking in set_note_name_cb");
+    if (!lvgl_port_lock(0)) {
+        return;
+    }
     const char *note_string = (const char *)lv_timer_get_user_data(timer);
     memset(noteNameBuffer, '\0', MAX_PITCH_NAME_LENGTH);
     snprintf(noteNameBuffer, MAX_PITCH_NAME_LENGTH, "%s", note_string);
@@ -385,9 +388,9 @@ void set_note_name_cb(lv_timer_t * timer) {
 
     lv_timer_pause(timer);
 
-    ESP_LOGI("LOCK", "unlocking in set_note_name_cb");
+    // ESP_LOGI("LOCK", "unlocking in set_note_name_cb");
     lvgl_port_unlock();
-    ESP_LOGI("LOCK", "unlocked in set_note_name_cb");
+    // ESP_LOGI("LOCK", "unlocked in set_note_name_cb");
 }
 
 void update_note_name(const char *new_value) {
@@ -494,9 +497,9 @@ static void continuous_adc_init(adc_channel_t *channel, uint8_t channel_count, a
 }
 
 static esp_err_t app_lvgl_main() {
-    ESP_LOGI("LOCK", "locking in app_lvgl_main");
+    // ESP_LOGI("LOCK", "locking in app_lvgl_main");
     lvgl_port_lock(0);
-    ESP_LOGI("LOCK", "locked in app_lvgl_main");
+    // ESP_LOGI("LOCK", "locked in app_lvgl_main");
 
     lv_obj_t *scr = lv_scr_act();
     screen_width = lv_obj_get_width(scr);
@@ -514,9 +517,9 @@ static esp_err_t app_lvgl_main() {
     lv_timer_pause(note_name_update_timer);
     lv_timer_reset(note_name_update_timer);
 
-    ESP_LOGI("LOCK", "unlocking in app_lvgl_main");
+    // ESP_LOGI("LOCK", "unlocking in app_lvgl_main");
     lvgl_port_unlock();
-    ESP_LOGI("LOCK", "unlocked in app_lvgl_main");
+    // ESP_LOGI("LOCK", "unlocked in app_lvgl_main");
 
     userSettings->setDisplayAndScreen(lvgl_display, main_screen);
 
@@ -536,10 +539,13 @@ void user_settings_changed() {
         lv_obj_set_style_text_color(note_name_label, lv_palette_main(palette), 0);
     }
 
+    // TODO: Here's where we should reload the tuning UI interface
+
     lvgl_port_unlock();
 
     oneEUFilter.setBeta(userSettings->oneEUBeta);
     smoother.setAmount(userSettings->expSmoothing);
+    // movingAverage.setWindowSize(userSettings->movingAvgWindow);
 }
 
 extern "C" void app_main() {
@@ -738,6 +744,7 @@ static void readAndDetectTask(void *pvParameter) {
                     current_frequency = -1; // Indicate to the UI that there's no frequency available
                     oneEUFilter.reset(); // Reset the 1EU filter so the next frequency it detects will be as fast as possible
                     smoother.reset();
+                    // movingAverage.reset();
                     pd.reset();
                     vTaskDelay(10 / portTICK_PERIOD_MS); // Should be 10ms?
                     continue;
@@ -793,7 +800,7 @@ static void readAndDetectTask(void *pvParameter) {
                     if (pd(s) == true) { // calculated a frequency
                         auto f = pd.get_frequency();
 
-                        bool use1EUFilterFirst = false; // TODO: This may never be needed. Need to test which "feels" better for tuning
+                        bool use1EUFilterFirst = true; // TODO: This may never be needed. Need to test which "feels" better for tuning
                         if (use1EUFilterFirst) {
                             // 1EU Filtering
                             f = (float)oneEUFilter.filter((double)f, (TimeStamp)time_seconds); // Stores the current frequency in the global current_frequency variable
@@ -807,6 +814,9 @@ static void readAndDetectTask(void *pvParameter) {
                             // 1EU Filtering
                             f = (float)oneEUFilter.filter((double)f, (TimeStamp)time_seconds); // Stores the current frequency in the global current_frequency variable
                         }
+
+                        // Moving average (makes it BAD!)
+                        // f = movingAverage.addValue(f);
 
                         current_frequency = f / WEIRD_ESP32_WROOM_32_FREQ_FIX_FACTOR;
                     }
