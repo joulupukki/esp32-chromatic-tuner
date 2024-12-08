@@ -23,9 +23,11 @@ extern "C" { // because these files are C and not C++
 #define DEFAULT_IN_TUNE_CENTS_WIDTH     ((uint8_t) 2)
 #define DEFAULT_NOTE_NAME_PALETTE       ((lv_palette_t) LV_PALETTE_NONE)
 #define DEFAULT_DISPLAY_ORIENTATION     ((TunerOrientation) orientationNormal);
-#define DEFAULT_EXP_SMOOTHING           ((float) 0.15)
-#define DEFAULT_ONE_EU_BETA             ((float) 0.05)
-#define DEFAULT_NOTE_DEBOUNCE_INTERVAL  ((float) 110.0)
+#define DEFAULT_EXP_SMOOTHING           ((float) 0.09)
+#define DEFAULT_ONE_EU_BETA             ((float) 0.003)
+#define DEFAULT_NOTE_DEBOUNCE_INTERVAL  ((float) 115.0)
+#define DEFAULT_USE_1EU_FILTER_FIRST    (true)
+// #define DEFAULT_MOVING_AVG_WINDOW       ((float) 100)
 #define DEFAULT_DISPLAY_BRIGHTNESS      ((float) 0.75)
 
 enum TunerOrientation: uint8_t {
@@ -64,13 +66,16 @@ public:
     bool isShowingMenu = false;
 
     // User Setting Variables
-    uint8_t             inTuneCentsWidth        = DEFAULT_IN_TUNE_CENTS_WIDTH;    // 2,                     Range 1 - 6
-    lv_palette_t        noteNamePalette         = DEFAULT_NOTE_NAME_PALETTE; // white. Use lv_color_t c = lv_palette_main(LV_PALETTE_...) to get a color in LVGL. In the case of white, use lv_color_white()
+    uint8_t             inTuneCentsWidth        = DEFAULT_IN_TUNE_CENTS_WIDTH;
+    lv_palette_t        noteNamePalette         = DEFAULT_NOTE_NAME_PALETTE;
     TunerOrientation    displayOrientation      = DEFAULT_DISPLAY_ORIENTATION;
-    float               expSmoothing            = DEFAULT_EXP_SMOOTHING;   // 15 * .01 = 0.15,              Range: 0 - 100
-    float               oneEUBeta               = DEFAULT_ONE_EU_BETA;   // 50 * .001 = 0.05,               Range: 0 - 1000
-    float               noteDebounceInterval    = DEFAULT_NOTE_DEBOUNCE_INTERVAL;  // In milliseconds,      Range: 100 - 500
-    float               displayBrightness       = DEFAULT_DISPLAY_BRIGHTNESS;   // 75 * .01 = 0.75,         Range: 10 - 100
+    float               displayBrightness       = DEFAULT_DISPLAY_BRIGHTNESS;
+
+    float               expSmoothing            = DEFAULT_EXP_SMOOTHING;
+    float               oneEUBeta               = DEFAULT_ONE_EU_BETA;
+    float               noteDebounceInterval    = DEFAULT_NOTE_DEBOUNCE_INTERVAL;
+    bool                use1EUFilterFirst       = DEFAULT_USE_1EU_FILTER_FIRST;
+//    float               movingAvgWindow         = DEFAULT_MOVING_AVG_WINDOW;
 
     /**
      * @brief Create the settings object and sets its parameters
@@ -148,7 +153,7 @@ static void handleDebugButtonClicked(lv_event_t *e);
 static void handleExpSmoothingButtonClicked(lv_event_t *e);
 static void handle1EUBetaButtonClicked(lv_event_t *e);
 static void handle1EUFilterFirstButtonClicked(lv_event_t *e);
-static void handleMovingAvgButtonClicked(lv_event_t *e);
+// static void handleMovingAvgButtonClicked(lv_event_t *e);
 static void handleNameDebouncingButtonClicked(lv_event_t *e);
 
 static void handleAboutButtonClicked(lv_event_t *e);
