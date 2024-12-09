@@ -32,6 +32,7 @@
 #define MENU_BTN_EXIT               "Exit"
 
 // Setting keys in NVS can only be up to 15 chars max
+#define SETTING_TUNER_GUI_INDEX             "tuner_gui_index"
 #define SETTING_KEY_IN_TUNE_WIDTH           "in_tune_width"
 #define SETTING_KEY_NOTE_NAME_PALETTE       "note_nm_palette"
 #define SETTING_KEY_DISPLAY_ORIENTATION     "display_orient"
@@ -82,6 +83,12 @@ void UserSettings::loadSettings() {
 
     uint8_t value;
     uint32_t value32;
+
+    if (nvs_get_u8(nvsHandle, SETTING_TUNER_GUI_INDEX, &value) == ESP_OK) {
+        tunerGUIIndex = value;
+    } else {
+        tunerGUIIndex = DEFAULT_TUNER_GUI_INDEX;
+    }
 
     if (nvs_get_u8(nvsHandle, SETTING_KEY_IN_TUNE_WIDTH, &value) == ESP_OK) {
         inTuneCentsWidth = value;
@@ -148,8 +155,9 @@ void UserSettings::setIsShowingSettings(bool isShowing) {
 // PUBLIC Methods
 //
 
-UserSettings::UserSettings(settings_changed_cb_t callback) {
-    settingsChangedCallback = callback;
+UserSettings::UserSettings(settings_changed_cb_t changedCallback, settings_will_exit_cb_t exitCallback) {
+    settingsChangedCallback = changedCallback;
+    settingsWillExitCallback = exitCallback;
     loadSettings();
 }
 
@@ -164,6 +172,9 @@ bool UserSettings::isShowingSettings() {
 void UserSettings::saveSettings() {
     uint8_t value;
     uint32_t value32;
+
+    value = tunerGUIIndex;
+    nvs_set_u8(nvsHandle, SETTING_TUNER_GUI_INDEX, value);
 
     value = inTuneCentsWidth;
     nvs_set_u8(nvsHandle, SETTING_KEY_IN_TUNE_WIDTH, value);
@@ -569,6 +580,7 @@ void UserSettings::exitSettings() {
     }
 
     lv_obj_t *mainScreen = screenStack.front();
+    settingsWillExitCallback();
     lv_scr_load(mainScreen);
 
     // Remove all but the first item out of the screenStack.
@@ -581,6 +593,7 @@ void UserSettings::exitSettings() {
     }
 
     lvgl_port_unlock();
+
     setIsShowingSettings(false);
 }
 

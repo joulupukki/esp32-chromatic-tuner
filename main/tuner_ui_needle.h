@@ -3,10 +3,15 @@
 
     Distributed under the MIT License [ https://opensource.org/licenses/MIT ]
 =============================================================================*/
-#if !defined(TUNER_GUI_TASK)
-#define TUNER_GUI_TASK
+#if !defined(TUNER_NEEDLE_GUI)
+#define TUNER_NEEDLE_GUI
 
-void user_settings_updated();
-void user_settings_will_exit();
+#include "lvgl.h"
+
+uint8_t needle_guit_get_id();
+const char * needle_gui_get_name();
+void needle_gui_init(lv_obj_t *screen);
+void needle_gui_display_frequency(float frequency, const char *note_name, float cents);
+void needle_gui_cleanup();
 
 #endif

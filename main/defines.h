@@ -9,6 +9,7 @@
 //
 // Default User Settings
 //
+#define DEFAULT_TUNER_GUI_INDEX         (0)
 #define DEFAULT_IN_TUNE_CENTS_WIDTH     ((uint8_t) 2)
 #define DEFAULT_NOTE_NAME_PALETTE       ((lv_palette_t) LV_PALETTE_NONE)
 #define DEFAULT_DISPLAY_ORIENTATION     ((TunerOrientation) orientationNormal);

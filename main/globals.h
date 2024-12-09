@@ -12,6 +12,9 @@
 #if !defined(TUNER_GLOBALS)
 #define TUNER_GLOBALS
 
+static const char *note_names[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+static const char *no_freq_name = "-";
+
 /// @brief Gets the currently-detected frequency (thread safe).
 /// @return The currently-detected frequency or -1 if no frequency is detected.
 float get_current_frequency();

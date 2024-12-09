@@ -33,6 +33,7 @@ enum TunerOrientation: uint8_t {
 };
 
 typedef void (*settings_changed_cb_t)();
+typedef void (*settings_will_exit_cb_t)();
 
 /// @brief A class used to display and manage user settings.
 class UserSettings {
@@ -52,6 +53,7 @@ class UserSettings {
     bool isShowingMenu = false;
 
     settings_changed_cb_t settingsChangedCallback;
+    settings_will_exit_cb_t settingsWillExitCallback;
 
     /// @brief Loads settings from persistent storage.
     void loadSettings();
@@ -62,6 +64,7 @@ class UserSettings {
 
 public:
     // User Setting Variables
+    uint8_t             tunerGUIIndex           = 0; // The ID is also the index in the `available_guis` array.
     uint8_t             inTuneCentsWidth        = DEFAULT_IN_TUNE_CENTS_WIDTH;
     lv_palette_t        noteNamePalette         = DEFAULT_NOTE_NAME_PALETTE;
     TunerOrientation    displayOrientation      = DEFAULT_DISPLAY_ORIENTATION;
@@ -75,9 +78,8 @@ public:
 
     /**
      * @brief Create the settings object and sets its parameters
-     * @param mainScreen The LVGL main screen in the app.
      */
-    UserSettings(settings_changed_cb_t callback);
+    UserSettings(settings_changed_cb_t settingsChangedCallback, settings_will_exit_cb_t settingsWillExitCallback);
 
     /// @brief Know if the settings menu is being shown (thread safe).
     /// @return Returns `true` if the settings menu is currently showing.
