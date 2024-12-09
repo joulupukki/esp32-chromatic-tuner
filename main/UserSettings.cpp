@@ -6,7 +6,13 @@
 =============================================================================*/
 #include "UserSettings.h"
 
+#include "tuner_ui_interface.h"
+
+extern TunerGUIInterface available_guis[1]; // defined in tuner_gui_task.cpp
+extern size_t num_of_available_guis;
+
 #define MENU_BTN_TUNER              "Tuner"
+#define MENU_BTN_TUNER_MODE         "Mode"
 #define MENU_BTN_IN_TUNE_THRESHOLD  "In-Tune Threshold"
 
 #define MENU_BTN_DISPLAY            "Display"
@@ -72,6 +78,51 @@ SETTINGS
         
     Exit
 */
+
+//
+// Function Declarations
+//
+static void handleTunerButtonClicked(lv_event_t *e);
+static void handleTunerModeButtonClicked(lv_event_t *e);
+static void handleTunerModeSelected(lv_event_t *e);
+static void handleInTuneThresholdButtonClicked(lv_event_t *e);
+static void handleInTuneThresholdButtonValueClicked(lv_event_t *e);
+static void handleInTuneThresholdRoller(lv_event_t *e);
+
+static void handleDisplayButtonClicked(lv_event_t *e);
+static void handleBrightnessButtonClicked(lv_event_t *e);
+static void handleBrightnessSlider(lv_event_t *e);
+
+static void handleNoteColorButtonClicked(lv_event_t *e);
+static void handleNoteColorSelected(lv_event_t *e);
+static void handleNoteColorWhiteSelected(lv_event_t *e);
+static void handleNoteColorRedSelected(lv_event_t *e);
+static void handleNoteColorPinkSelected(lv_event_t *e);
+static void handleNoteColorPurpleSelected(lv_event_t *e);
+static void handleNoteColorBlueSelected(lv_event_t *e);
+static void handleNoteColorGreenSelected(lv_event_t *e);
+static void handleNoteColorOrangeSelected(lv_event_t *e);
+static void handleNoteColorYellowSelected(lv_event_t *e);
+
+static void handleIndicatorButtonClicked(lv_event_t *e);
+static void handleRotationButtonClicked(lv_event_t *e);
+static void handleRotationNormalClicked(lv_event_t *e);
+static void handleRotationLeftClicked(lv_event_t *e);
+static void handleRotationRightClicked(lv_event_t *e);
+static void handleRotationUpsideDnClicked(lv_event_t *e);
+
+static void handleDebugButtonClicked(lv_event_t *e);
+static void handleExpSmoothingButtonClicked(lv_event_t *e);
+static void handle1EUBetaButtonClicked(lv_event_t *e);
+static void handle1EUFilterFirstButtonClicked(lv_event_t *e);
+// static void handleMovingAvgButtonClicked(lv_event_t *e);
+static void handleNameDebouncingButtonClicked(lv_event_t *e);
+
+static void handleAboutButtonClicked(lv_event_t *e);
+static void handleFactoryResetButtonClicked(lv_event_t *e);
+
+static void handleBackButtonClicked(lv_event_t *e);
+static void handleExitButtonClicked(lv_event_t *e);
 
 //
 // PRIVATE Methods
@@ -204,6 +255,8 @@ void UserSettings::saveSettings() {
     nvs_set_u8(nvsHandle, SETTING_KEY_DISPLAY_BRIGHTNESS, value);
 
     nvs_commit(nvsHandle);
+
+    ESP_LOGI("Settings", "Settings saved");
 
     settingsChangedCallback();
 }
@@ -650,12 +703,61 @@ static void handleTunerButtonClicked(lv_event_t *e) {
     settings = (UserSettings *)lv_obj_get_user_data((lv_obj_t *)lv_event_get_target(e));
     lvgl_port_unlock();
     const char *buttonNames[] = {
+        MENU_BTN_TUNER_MODE,
         MENU_BTN_IN_TUNE_THRESHOLD,
     };
     lv_event_cb_t callbackFunctions[] = {
+        handleTunerModeButtonClicked,
         handleInTuneThresholdButtonClicked,
     };
-    settings->createMenu(buttonNames, NULL, NULL, callbackFunctions, 1);
+    settings->createMenu(buttonNames, NULL, NULL, callbackFunctions, 2);
+}
+
+static void handleTunerModeButtonClicked(lv_event_t *e) {
+    ESP_LOGI("Settings", "Tuner mode button clicked");
+    UserSettings *settings;
+    if (!lvgl_port_lock(0)) {
+        return;
+    }
+    settings = (UserSettings *)lv_obj_get_user_data((lv_obj_t *)lv_event_get_target(e));
+    lvgl_port_unlock();
+
+    const char **buttonNames = (const char **)malloc(sizeof(const char *) * num_of_available_guis);
+    lv_event_cb_t *callbackFunctions = (lv_event_cb_t *)malloc(sizeof(lv_event_cb_t) * num_of_available_guis);
+
+    for (int i = 0; i < num_of_available_guis; i++) {
+        buttonNames[i] = available_guis[i].get_name();
+        callbackFunctions[i] = handleTunerModeSelected;
+    }
+
+    settings->createMenu(buttonNames, NULL, NULL, callbackFunctions, num_of_available_guis);
+    free(buttonNames);
+    free(callbackFunctions);
+}
+
+static void handleTunerModeSelected(lv_event_t *e) {
+    ESP_LOGI("Settings", "Tuner mode clicked");
+    UserSettings *settings;
+    if (!lvgl_port_lock(0)) {
+        return;
+    }
+    settings = (UserSettings *)lv_obj_get_user_data((lv_obj_t *)lv_event_get_target(e));
+
+    // Determine which mode was selected by the name of the button selected
+    lv_obj_t *btn = (lv_obj_t *)lv_event_get_target(e);
+    lv_obj_t *label = lv_obj_get_child(btn, 0);
+    char *button_text = lv_label_get_text(label);
+
+    lvgl_port_unlock();
+
+    for (int i = 0; i < num_of_available_guis; i++) {
+        if (strcmp(available_guis[i].get_name(), button_text) == 0) {
+            // This is the one!
+            settings->tunerGUIIndex = i;
+            settings->removeCurrentMenu(); // Don't make the user click back
+            return;
+        }
+    }
 }
 
 static void handleInTuneThresholdButtonClicked(lv_event_t *e) {
