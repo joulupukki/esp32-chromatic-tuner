@@ -37,16 +37,21 @@ GPIO 27 - Momentary foot switch input
 
 static const char *TAG = "TUNER";
 
-void user_settings_changed() {
+void user_settings_changed_cb() {
     update_pitch_detector_user_settings();
-    update_tuner_user_settings();
+    user_settings_updated();
+}
+
+/// @brief Called right before user settings exits back to the main tuner UI.
+void user_settings_will_exit_cb() {
+    user_settings_will_exit();
 }
 
 extern "C" void app_main() {
 
     // Initialize NVS (Persistent Flash Storage for User Settings)
-    userSettings = new UserSettings(user_settings_changed);
-    user_settings_changed();
+    userSettings = new UserSettings(user_settings_changed_cb, user_settings_will_exit_cb);
+    user_settings_changed_cb(); // Calling this allows the pitch detector and tuner UI to initialize properly with current user
 
     // Start the Display Task
     xTaskCreatePinnedToCore(
