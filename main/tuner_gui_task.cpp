@@ -66,8 +66,14 @@ TunerGUIInterface needle_gui = {
 };
 
 TunerGUIInterface available_guis[] = {
+
+    // IMPORTANT: Make sure you update `num_of_available_guis` below so any new
+    // Tuner GUI you add here will show up in the user settings as an option.
+    
     needle_gui, // ID = 0
 };
+
+size_t num_of_available_guis = 1;
 
 TunerGUIInterface *active_gui = NULL;
 

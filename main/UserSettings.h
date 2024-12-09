@@ -125,44 +125,4 @@ public:
     void rotateScreenTo(TunerOrientation newRotation);
 };
 
-static void handleTunerButtonClicked(lv_event_t *e);
-static void handleInTuneThresholdButtonClicked(lv_event_t *e);
-static void handleInTuneThresholdButtonValueClicked(lv_event_t *e);
-static void handleInTuneThresholdRoller(lv_event_t *e);
-
-static void handleDisplayButtonClicked(lv_event_t *e);
-static void handleBrightnessButtonClicked(lv_event_t *e);
-static void handleBrightnessSlider(lv_event_t *e);
-
-static void handleNoteColorButtonClicked(lv_event_t *e);
-static void handleNoteColorSelected(lv_event_t *e);
-static void handleNoteColorWhiteSelected(lv_event_t *e);
-static void handleNoteColorRedSelected(lv_event_t *e);
-static void handleNoteColorPinkSelected(lv_event_t *e);
-static void handleNoteColorPurpleSelected(lv_event_t *e);
-static void handleNoteColorBlueSelected(lv_event_t *e);
-static void handleNoteColorGreenSelected(lv_event_t *e);
-static void handleNoteColorOrangeSelected(lv_event_t *e);
-static void handleNoteColorYellowSelected(lv_event_t *e);
-
-static void handleIndicatorButtonClicked(lv_event_t *e);
-static void handleRotationButtonClicked(lv_event_t *e);
-static void handleRotationNormalClicked(lv_event_t *e);
-static void handleRotationLeftClicked(lv_event_t *e);
-static void handleRotationRightClicked(lv_event_t *e);
-static void handleRotationUpsideDnClicked(lv_event_t *e);
-
-static void handleDebugButtonClicked(lv_event_t *e);
-static void handleExpSmoothingButtonClicked(lv_event_t *e);
-static void handle1EUBetaButtonClicked(lv_event_t *e);
-static void handle1EUFilterFirstButtonClicked(lv_event_t *e);
-// static void handleMovingAvgButtonClicked(lv_event_t *e);
-static void handleNameDebouncingButtonClicked(lv_event_t *e);
-
-static void handleAboutButtonClicked(lv_event_t *e);
-static void handleFactoryResetButtonClicked(lv_event_t *e);
-
-static void handleBackButtonClicked(lv_event_t *e);
-static void handleExitButtonClicked(lv_event_t *e);
-
 #endif
