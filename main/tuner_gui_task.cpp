@@ -21,6 +21,7 @@
 // These are the tuner UIs available.
 //
 #include "tuner_ui_needle.h"
+#include "tuner_ui_strobe.h"
 
 //
 // LVGL Support
@@ -58,11 +59,19 @@ bool is_gui_loaded = false;
 /// Add the different GUIs here.
 ///
 TunerGUIInterface needle_gui = {
-    .get_id = needle_guit_get_id,
+    .get_id = needle_gui_get_id,
     .get_name = needle_gui_get_name,
     .init = needle_gui_init,
     .display_frequency = needle_gui_display_frequency,
     .cleanup = needle_gui_cleanup
+};
+
+TunerGUIInterface strobe_gui = {
+    .get_id = strobe_gui_get_id,
+    .get_name = strobe_gui_get_name,
+    .init = strobe_gui_init,
+    .display_frequency = strobe_gui_display_frequency,
+    .cleanup = strobe_gui_cleanup
 };
 
 TunerGUIInterface available_guis[] = {
@@ -71,9 +80,10 @@ TunerGUIInterface available_guis[] = {
     // Tuner GUI you add here will show up in the user settings as an option.
     
     needle_gui, // ID = 0
+    strobe_gui,
 };
 
-size_t num_of_available_guis = 1;
+size_t num_of_available_guis = 2;
 
 TunerGUIInterface *active_gui = NULL;
 
