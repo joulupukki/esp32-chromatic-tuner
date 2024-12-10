@@ -41,7 +41,7 @@ extern "C" const lv_font_t fontawesome_48;
 
 // Local Function Declarations
 float midi_note_from_frequency(float freq);
-const char * get_pitch_name_and_cents_from_frequency(float freq, float *cents);
+TunerNoteName get_pitch_name_and_cents_from_frequency(float freq, float *cents);
 void create_main_screen_ui();
 void settings_button_cb(lv_event_t *e);
 void create_settings_menu_button(lv_obj_t * parent);
@@ -139,11 +139,11 @@ void tuner_gui_task(void *pvParameter) {
         if (userSettings != NULL && !userSettings->isShowingSettings() && lvgl_port_lock(0)) {
             float frequency = get_current_frequency();
             if (frequency > 0) {
-                const char *note_name = get_pitch_name_and_cents_from_frequency(frequency, &cents);
+                TunerNoteName note_name = get_pitch_name_and_cents_from_frequency(frequency, &cents);
                 // ESP_LOGI(TAG, "%s - %d", noteName, cents);
                 get_active_gui().display_frequency(frequency, note_name, cents);
             } else {
-                get_active_gui().display_frequency(0, NULL, 0);
+                get_active_gui().display_frequency(0, NOTE_NONE, 0);
             }
             // Release the mutex
             lvgl_port_unlock();
@@ -180,11 +180,10 @@ float midi_note_from_frequency(float freq) {
 }
 
 // Function to get pitch name and cents from MIDI note number
-const char * get_pitch_name_and_cents_from_frequency(float freq, float *cents) {
+TunerNoteName get_pitch_name_and_cents_from_frequency(float freq, float *cents) {
     float midi_note = midi_note_from_frequency(freq);
     int note_index = (int)fmod(midi_note, 12);
     float fractional_note = midi_note - (int)midi_note;
-
 
     *cents = (fractional_note * CENTS_PER_SEMITONE);
     if (*cents >= CENTS_PER_SEMITONE / 2) {
@@ -193,16 +192,13 @@ const char * get_pitch_name_and_cents_from_frequency(float freq, float *cents) {
         if (note_index >= 12) {
             note_index = 0; // Overflow to the beginning of the note names
         }
-        // *cents = *cents - CENTS_PER_SEMITONE;
         *cents -= CENTS_PER_SEMITONE; // Adjust to valid range
     }
 
-    // strncpy(pitch_name, note_names[note_index], strlen(note_names[note_index]));
     if (note_index > 12) { // safeguard to prevent crash of snprintf()
         note_index = 0;
     }
-    // pitch_name[strlen(note_names[note_index])] = '\0';
-    return note_names[note_index];
+    return (TunerNoteName)note_index;
 }
 
 void create_main_screen_ui() {
