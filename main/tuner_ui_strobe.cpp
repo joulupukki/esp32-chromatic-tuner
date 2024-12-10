@@ -12,6 +12,12 @@
 
 #include "esp_lvgl_port.h"
 
+/// The strobe works by changing the rotation of the lv_arc widgets by a certain
+/// amount each time it receives a frequency. Changing the rotation too much
+/// makes the rotation direction nearly impossible to determine and this keeps
+/// that under control.
+#define MAX_CENTS_ROTATION 30
+
 extern UserSettings *userSettings;
 extern lv_coord_t screen_width;
 extern lv_coord_t screen_height;
@@ -21,7 +27,7 @@ extern "C" const lv_font_t raleway_128;
 //
 // Function Definitions
 //
-void strobe_create_arc(lv_obj_t * parent);
+void strobe_create_arcs(lv_obj_t * parent);
 void strobe_create_labels(lv_obj_t * parent);
 void strobe_set_note_name_cb(lv_timer_t * timer);
 void strobe_update_note_name(const char *new_value);
@@ -45,7 +51,12 @@ lv_style_t strobe_frequency_label_style;
 lv_obj_t *strobe_cents_label;
 lv_style_t strobe_cents_label_style;
 
-lv_obj_t *strobe_arc;
+lv_obj_t *strobe_arc_container;
+lv_obj_t *strobe_arc1;
+lv_obj_t *strobe_arc2;
+lv_obj_t *strobe_arc3;
+
+float strobe_rotation_current_pos = 0;
 
 uint8_t strobe_gui_get_id() {
     return 1;
@@ -57,7 +68,7 @@ const char * strobe_gui_get_name() {
 
 void strobe_gui_init(lv_obj_t *screen) {
     strobe_parent_screen = screen;
-    strobe_create_arc(screen);
+    strobe_create_arcs(screen);
     strobe_create_labels(screen);
 
     // Create a new timer that will fire. This will
@@ -91,17 +102,11 @@ void strobe_gui_display_frequency(float frequency, const char *note_name, float 
             indicator_x_pos = segment_index * segment_width_pixels; 
         }
 
-        // lv_obj_align(pitch_indicator_bar, LV_ALIGN_TOP_MID, indicator_x_pos, 18);
-        // lv_anim_set_values(&pitch_animation, last_pitch_indicator_pos, indicator_x_pos);
-        // last_pitch_indicator_pos = indicator_x_pos;
-
-        // Make the two bars show up
-        // lv_obj_clear_flag(pitch_indicator_bar, LV_OBJ_FLAG_HIDDEN);
+        // Make the strobe arcs show up
+        lv_obj_clear_flag(strobe_arc_container, LV_OBJ_FLAG_HIDDEN);
 
         lv_label_set_text_fmt(strobe_cents_label, "%.1f", cents);
         lv_obj_clear_flag(strobe_cents_label, LV_OBJ_FLAG_HIDDEN);
-
-        // lv_anim_start(&pitch_animation);
     } else {
         // Hide the pitch and indicators since it's not detected
         if (strobeLastDisplayedNote != no_freq_name) {
@@ -109,10 +114,24 @@ void strobe_gui_display_frequency(float frequency, const char *note_name, float 
             strobeLastDisplayedNote = no_freq_name;
         }
 
-        // Hide the indicator bars and cents label
-        // lv_obj_add_flag(pitch_indicator_bar, LV_OBJ_FLAG_HIDDEN);
+        // Hide the strobe arcs, frequency, and cents labels
+        lv_obj_add_flag(strobe_arc_container, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(strobe_cents_label, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(strobe_frequency_label, LV_OBJ_FLAG_HIDDEN);
+    }
+
+    float amount_to_rotate = cents;
+    if (amount_to_rotate > MAX_CENTS_ROTATION) {
+        amount_to_rotate = MAX_CENTS_ROTATION;
+    } else if (amount_to_rotate < MAX_CENTS_ROTATION) {
+        amount_to_rotate = -MAX_CENTS_ROTATION;
+    }
+
+    if (amount_to_rotate != 0) {
+        strobe_rotation_current_pos += cents; // This will make the strobe rotate left or right depending on how off the tuning is
+        lv_arc_set_rotation(strobe_arc1, strobe_rotation_current_pos);
+        lv_arc_set_rotation(strobe_arc2, strobe_rotation_current_pos + 120); // 1/3 of a circle ahead
+        lv_arc_set_rotation(strobe_arc3, strobe_rotation_current_pos + 240); // 2/3 of a circle ahead
     }
 }
 
@@ -120,8 +139,48 @@ void strobe_gui_cleanup() {
     // TODO: Do any cleanup needed here. 
 }
 
-void strobe_create_arc(lv_obj_t * parent) {
-    // TODO: Create the strobe arc
+void strobe_create_arcs(lv_obj_t * parent) {
+    strobe_arc_container = lv_obj_create(parent);
+    lv_obj_set_size(strobe_arc_container, lv_pct(100), lv_pct(100));
+    lv_obj_set_style_bg_color(strobe_arc_container, lv_color_black(), LV_PART_MAIN);
+    lv_obj_set_style_border_width(strobe_arc_container, 0, 0);
+    lv_obj_center(strobe_arc_container);
+
+    strobe_arc1 = lv_arc_create(strobe_arc_container);
+    strobe_arc2 = lv_arc_create(strobe_arc_container);
+    strobe_arc3 = lv_arc_create(strobe_arc_container);
+    // lv_arc_set_rotation(strobe_arc1, 0);
+    // lv_arc_set_rotation(strobe_arc2, 120);
+    // lv_arc_set_rotation(strobe_arc1, 240);
+
+    lv_obj_remove_style(strobe_arc1, NULL, LV_PART_KNOB); // Don't show a knob
+    lv_obj_remove_style(strobe_arc2, NULL, LV_PART_KNOB); // Don't show a knob
+    lv_obj_remove_style(strobe_arc3, NULL, LV_PART_KNOB); // Don't show a knob
+
+    lv_obj_remove_flag(strobe_arc1, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_remove_flag(strobe_arc2, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_remove_flag(strobe_arc3, LV_OBJ_FLAG_CLICKABLE);
+
+    lv_obj_set_size(strobe_arc1, 200, 200);
+    lv_obj_set_size(strobe_arc2, 200, 200);
+    lv_obj_set_size(strobe_arc3, 200, 200);
+
+    lv_obj_set_style_arc_width(strobe_arc1, 20, LV_PART_INDICATOR);
+    lv_obj_set_style_arc_width(strobe_arc2, 20, LV_PART_INDICATOR);
+    lv_obj_set_style_arc_width(strobe_arc3, 20, LV_PART_INDICATOR);
+
+    lv_obj_center(strobe_arc1);
+    lv_obj_center(strobe_arc2);
+    lv_obj_center(strobe_arc3);
+
+    lv_arc_set_angles(strobe_arc1, 0, 90);
+    lv_arc_set_angles(strobe_arc2, 120, 210); // length of 90 and offset by 1/3 of a circle
+    lv_arc_set_angles(strobe_arc3, 240, 330); // length of 90 and offset by 2/3 of a circle
+
+    // Hide the background tracks
+    lv_obj_set_style_arc_opa(strobe_arc1, LV_OPA_0, 0);
+    lv_obj_set_style_arc_opa(strobe_arc2, LV_OPA_0, 0);
+    lv_obj_set_style_arc_opa(strobe_arc3, LV_OPA_0, 0);
 }
 
 void strobe_create_labels(lv_obj_t * parent) {
@@ -146,7 +205,7 @@ void strobe_create_labels(lv_obj_t * parent) {
 
     lv_obj_add_style(strobe_note_name_label, &strobe_note_name_label_style, 0);
 
-    lv_obj_align(strobe_note_name_label, LV_ALIGN_CENTER, 0, 20); // Offset down by 20 pixels
+    lv_obj_align(strobe_note_name_label, LV_ALIGN_CENTER, 0, 0);
 
     // Frequency Label (very bottom)
     strobe_frequency_label = lv_label_create(parent);
@@ -177,7 +236,6 @@ void strobe_create_labels(lv_obj_t * parent) {
 
 void strobe_set_note_name_cb(lv_timer_t * timer) {
     // The note name is in the timer's user data
-    // ESP_LOGI("LOCK", "locking in strobe_set_note_name_cb");
     if (!lvgl_port_lock(0)) {
         return;
     }
@@ -189,9 +247,7 @@ void strobe_set_note_name_cb(lv_timer_t * timer) {
 
     lv_timer_pause(timer);
 
-    // ESP_LOGI("LOCK", "unlocking in strobe_set_note_name_cb");
     lvgl_port_unlock();
-    // ESP_LOGI("LOCK", "unlocked in strobe_set_note_name_cb");
 }
 
 void strobe_update_note_name(const char *new_value) {

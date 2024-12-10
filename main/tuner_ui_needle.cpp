@@ -114,7 +114,7 @@ void needle_gui_display_frequency(float frequency, const char *note_name, float 
             needle_last_displayed_note = no_freq_name;
         }
 
-        // Hide the indicator bars and cents label
+        // Hide the indicator bar, frequency, and cents labels
         lv_obj_add_flag(needle_pitch_indicator_bar, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(needle_cents_label, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(needle_frequency_label, LV_OBJ_FLAG_HIDDEN);
