@@ -83,7 +83,6 @@
 #define CENTS_PER_SEMITONE              100
 
 #define INDICATOR_SEGMENTS              100 // num of visual segments for showing tuning accuracy
-#define PITCH_INDICATOR_BAR_WIDTH       8
 
 #define GEAR_SYMBOL "\xEF\x80\x93"
 
