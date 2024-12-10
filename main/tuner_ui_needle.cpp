@@ -26,7 +26,7 @@ extern "C" const lv_font_t raleway_128;
 void needle_create_ruler(lv_obj_t * parent);
 void needle_create_labels(lv_obj_t * parent);
 void needle_set_note_name_cb(lv_timer_t * timer);
-void needle_update_note_name(const char *new_value);
+void needle_update_note_name(TunerNoteName new_value);
 
 //
 // Local Variables
@@ -35,7 +35,7 @@ lv_obj_t *needle_parent_screen = NULL;
 
 // Keep track of the last note that was displayed so telling the UI to update
 // can be avoided if it is the same.
-const char *needle_last_displayed_note = no_freq_name;
+TunerNoteName needle_last_displayed_note = NOTE_NONE;
 
 lv_anim_t needle_pitch_animation;
 lv_coord_t needle_last_pitch_indicator_pos = (lv_coord_t)0.0;
@@ -71,8 +71,8 @@ void needle_gui_init(lv_obj_t *screen) {
     lv_timer_reset(needle_note_name_update_timer);
 }
 
-void needle_gui_display_frequency(float frequency, const char *note_name, float cents) {
-    if (note_name != NULL) {
+void needle_gui_display_frequency(float frequency, TunerNoteName note_name, float cents) {
+    if (note_name != NOTE_NONE) {
         lv_label_set_text_fmt(needle_frequency_label, "%.2f", frequency);
         lv_obj_clear_flag(needle_frequency_label, LV_OBJ_FLAG_HIDDEN);
 
@@ -109,9 +109,9 @@ void needle_gui_display_frequency(float frequency, const char *note_name, float 
         lv_anim_start(&needle_pitch_animation);
     } else {
         // Hide the pitch and indicators since it's not detected
-        if (needle_last_displayed_note != no_freq_name) {
-            needle_update_note_name(no_freq_name);
-            needle_last_displayed_note = no_freq_name;
+        if (needle_last_displayed_note != NOTE_NONE) {
+            needle_update_note_name(NOTE_NONE);
+            needle_last_displayed_note = NOTE_NONE;
         }
 
         // Hide the indicator bar, frequency, and cents labels
@@ -266,8 +266,8 @@ void needle_set_note_name_cb(lv_timer_t * timer) {
 
     // TODO: Maybe change this to use images instead of const char*
     // because the app is crashing too often with this mechanism.
-    const char *note_string = (const char *)lv_timer_get_user_data(timer);
-    lv_label_set_text_static(needle_note_name_label, note_string);
+    const char *note_name = (const char *)lv_timer_get_user_data(timer);    
+    lv_label_set_text_static(needle_note_name_label, note_name);
 
     lv_timer_pause(timer);
 
@@ -276,11 +276,11 @@ void needle_set_note_name_cb(lv_timer_t * timer) {
     // ESP_LOGI("LOCK", "unlocked in needle_set_note_name_cb");
 }
 
-void needle_update_note_name(const char *new_value) {
+void needle_update_note_name(TunerNoteName new_value) {
     // Set the note name with a timer so it doesn't get
     // set too often for LVGL. ADC makes it run SUPER
     // fast and can crash the software.
-    lv_timer_set_user_data(needle_note_name_update_timer, (void *)new_value);
+    lv_timer_set_user_data(needle_note_name_update_timer, (void *)note_names[(int)new_value]);
     lv_timer_set_period(needle_note_name_update_timer, (uint32_t)userSettings->noteDebounceInterval);
     lv_timer_reset(needle_note_name_update_timer);
     lv_timer_resume(needle_note_name_update_timer);

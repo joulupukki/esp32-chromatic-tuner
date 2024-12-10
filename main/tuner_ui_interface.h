@@ -8,6 +8,7 @@
 
 #include <stdlib.h>
 
+#include "globals.h"
 #include "lvgl.h"
 
 /// @brief Implement a tuner UI by implementing this interface.
@@ -31,7 +32,7 @@ typedef struct {
     void (*init)(lv_obj_t *screen);
     
     /// @brief Display the frequency/note/cents/etc.
-    void (*display_frequency)(float frequency, const char *note_name, float cents);
+    void (*display_frequency)(float frequency, TunerNoteName note_name, float cents);
 
     /// @brief Perform any cleanup needed (this UI is being deactivated).
     ///

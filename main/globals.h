@@ -12,7 +12,23 @@
 #if !defined(TUNER_GLOBALS)
 #define TUNER_GLOBALS
 
-static const char *note_names[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+typedef enum {
+    NOTE_C = 0,
+    NOTE_C_SHARP,
+    NOTE_D,
+    NOTE_D_SHARP,
+    NOTE_E,
+    NOTE_F,
+    NOTE_F_SHARP,
+    NOTE_G,
+    NOTE_G_SHARP,
+    NOTE_A,
+    NOTE_A_SHARP,
+    NOTE_B,
+    NOTE_NONE
+} TunerNoteName;
+
+static const char *note_names[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B", "-"};
 static const char *no_freq_name = "-";
 
 /// @brief Gets the currently-detected frequency (thread safe).
