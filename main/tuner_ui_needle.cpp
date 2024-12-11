@@ -34,6 +34,10 @@ LV_IMG_DECLARE(tuner_font_image_sharp)
 void needle_create_ruler(lv_obj_t * parent);
 void needle_create_labels(lv_obj_t * parent);
 void needle_update_note_name(TunerNoteName new_value);
+void needle_start_note_fade_animation();
+void needle_stop_note_fade_animation();
+void needle_last_note_anim_cb(lv_obj_t *obj, int32_t value);
+void needle_last_note_anim_completed_cb(lv_anim_t *);
 
 //
 // Local Variables
@@ -44,7 +48,8 @@ lv_obj_t *needle_parent_screen = NULL;
 // can be avoided if it is the same.
 TunerNoteName needle_last_displayed_note = NOTE_NONE;
 
-lv_obj_t *needle_note_name_img;
+lv_obj_t *needle_note_img_container;
+lv_obj_t *needle_note_img;
 lv_obj_t *needle_sharp_img;
 
 lv_anim_t needle_pitch_animation;
@@ -57,6 +62,9 @@ lv_obj_t *needle_cents_label;
 lv_style_t needle_cents_label_style;
 
 lv_obj_t *needle_pitch_indicator_bar;
+
+lv_anim_t *needle_last_note_anim = NULL;
+
 
 uint8_t needle_gui_get_id() {
     return 0;
@@ -73,6 +81,7 @@ void needle_gui_init(lv_obj_t *screen) {
 }
 
 void needle_gui_display_frequency(float frequency, TunerNoteName note_name, float cents) {
+    if (note_name < 0) { return; } // Strangely I'm sometimes seeing negative values. No idea how.
     if (note_name != NOTE_NONE) {
         lv_label_set_text_fmt(needle_frequency_label, "%.2f", frequency);
         lv_obj_clear_flag(needle_frequency_label, LV_OBJ_FLAG_HIDDEN);
@@ -218,25 +227,33 @@ void needle_create_ruler(lv_obj_t * parent) {
 }
 
 void needle_create_labels(lv_obj_t * parent) {
-    needle_note_name_img = lv_image_create(parent);
-    lv_image_set_src(needle_note_name_img, &tuner_font_image_none);
-    lv_obj_align(needle_note_name_img, LV_ALIGN_CENTER, 0, 20); // Offset down by 20 pixels
+    // Place the note name and # symbole in the same container so the opacity
+    // can be animated.
+    needle_note_img_container = lv_obj_create(parent);
+    lv_obj_set_size(needle_note_img_container, lv_pct(100), lv_pct(100));
+    lv_obj_set_style_bg_opa(needle_note_img_container, LV_OPA_0, 0);
+    lv_obj_set_style_border_width(needle_note_img_container, 0, 0);
+    lv_obj_set_scrollbar_mode(needle_note_img_container, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_center(needle_note_img_container);
 
-    needle_sharp_img = lv_image_create(parent);
+    needle_note_img = lv_image_create(needle_note_img_container);
+    lv_image_set_src(needle_note_img, &tuner_font_image_none);
+    lv_obj_align(needle_note_img, LV_ALIGN_CENTER, 0, 20); // Offset down by 20 pixels
+
+    needle_sharp_img = lv_image_create(needle_note_img_container);
     lv_image_set_src(needle_sharp_img, &tuner_font_image_sharp);
-
-    lv_obj_align_to(needle_sharp_img, needle_note_name_img, LV_ALIGN_TOP_RIGHT, 20, -15);
+    lv_obj_align_to(needle_sharp_img, needle_note_img, LV_ALIGN_TOP_RIGHT, 20, -15);
     lv_obj_add_flag(needle_sharp_img, LV_OBJ_FLAG_HIDDEN);
     
     // Enable recoloring on the images
-    lv_obj_set_style_img_recolor_opa(needle_note_name_img, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_img_recolor_opa(needle_note_img, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_img_recolor_opa(needle_sharp_img, LV_OPA_COVER, LV_PART_MAIN);
     lv_palette_t palette = userSettings->noteNamePalette;
     if (palette == LV_PALETTE_NONE) {
-        lv_obj_set_style_img_recolor(needle_note_name_img, lv_color_white(), 0);
+        lv_obj_set_style_img_recolor(needle_note_img, lv_color_white(), 0);
         lv_obj_set_style_img_recolor(needle_sharp_img, lv_color_white(), 0);
     } else {
-        lv_obj_set_style_img_recolor(needle_note_name_img, lv_palette_main(palette), 0);
+        lv_obj_set_style_img_recolor(needle_note_img, lv_palette_main(palette), 0);
         lv_obj_set_style_img_recolor(needle_sharp_img, lv_palette_main(palette), 0);
     }
 
@@ -260,6 +277,7 @@ void needle_update_note_name(TunerNoteName new_value) {
     // fast and can crash the software.
     const lv_image_dsc_t *img_desc;
     bool show_sharp_symbol = false;
+    bool show_note_fade_anim = false;
     switch (new_value) {
     case NOTE_A_SHARP:
         show_sharp_symbol = true;
@@ -292,16 +310,70 @@ void needle_update_note_name(TunerNoteName new_value) {
     case NOTE_G:
         img_desc = &tuner_font_image_g;
         break;
-    default:
-        img_desc = &tuner_font_image_none;
+    case NOTE_NONE:
+        show_note_fade_anim = true;
         break;
+    default:
+        return;
     }
 
-    if (show_sharp_symbol) {
-        lv_obj_remove_flag(needle_sharp_img, LV_OBJ_FLAG_HIDDEN);
+    if (show_note_fade_anim) {
+        needle_start_note_fade_animation();
     } else {
-        lv_obj_add_flag(needle_sharp_img, LV_OBJ_FLAG_HIDDEN);
+        needle_stop_note_fade_animation();
+
+        if (show_sharp_symbol) {
+            lv_obj_clear_flag(needle_sharp_img, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(needle_sharp_img, LV_OBJ_FLAG_HIDDEN);
+        }
+
+        lv_image_set_src(needle_note_img, img_desc);
+    }
+}
+
+void needle_start_note_fade_animation() {
+    needle_last_note_anim = (lv_anim_t *)malloc(sizeof(lv_anim_t));
+    lv_anim_init(needle_last_note_anim);
+    lv_anim_set_exec_cb(needle_last_note_anim, (lv_anim_exec_xcb_t)needle_last_note_anim_cb);
+    lv_anim_set_completed_cb(needle_last_note_anim, needle_last_note_anim_completed_cb);
+    lv_anim_set_var(needle_last_note_anim, needle_note_img_container);
+    lv_anim_set_duration(needle_last_note_anim, LAST_NOTE_FADE_INTERVAL_MS);
+    lv_anim_set_values(needle_last_note_anim, 100, 0); // Fade from 100% to 0% opacity
+    lv_anim_start(needle_last_note_anim);
+}
+
+void needle_stop_note_fade_animation() {
+    lv_obj_set_style_opa(needle_note_img_container, LV_OPA_100, 0);
+    if (needle_last_note_anim == NULL) {
+        return;
+    }
+    lv_anim_del_all();
+    delete(needle_last_note_anim);
+    needle_last_note_anim = NULL;
+}
+
+void needle_last_note_anim_cb(lv_obj_t *obj, int32_t value) {
+    if (!lvgl_port_lock(0)) {
+        return;
     }
 
-    lv_image_set_src(needle_note_name_img, img_desc);
+    lv_obj_set_style_opa(obj, value, LV_PART_MAIN);
+
+    lvgl_port_unlock();
+}
+
+void needle_last_note_anim_completed_cb(lv_anim_t *) {
+    if (!lvgl_port_lock(0)) {
+        return;
+    }
+    // The animation has completed so hide the note name and set
+    // the opacity back to 100%.
+    lv_obj_add_flag(needle_sharp_img, LV_OBJ_FLAG_HIDDEN);
+    lv_image_set_src(needle_note_img, &tuner_font_image_none);
+    needle_last_displayed_note = NOTE_NONE;
+
+    needle_stop_note_fade_animation();
+
+    lvgl_port_unlock();
 }

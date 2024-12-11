@@ -86,4 +86,9 @@
 
 #define GEAR_SYMBOL "\xEF\x80\x93"
 
+//
+// When the pitch stops being detected, the note can fade out. This is how long
+// that animation is set to run for.
+#define LAST_NOTE_FADE_INTERVAL_MS  2000
+
 #endif
