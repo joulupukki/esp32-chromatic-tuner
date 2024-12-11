@@ -18,14 +18,21 @@ extern UserSettings *userSettings;
 extern lv_coord_t screen_width;
 extern lv_coord_t screen_height;
 
-extern "C" const lv_font_t raleway_128;
+LV_IMG_DECLARE(tuner_font_image_a)
+LV_IMG_DECLARE(tuner_font_image_b)
+LV_IMG_DECLARE(tuner_font_image_c)
+LV_IMG_DECLARE(tuner_font_image_d)
+LV_IMG_DECLARE(tuner_font_image_e)
+LV_IMG_DECLARE(tuner_font_image_f)
+LV_IMG_DECLARE(tuner_font_image_g)
+LV_IMG_DECLARE(tuner_font_image_none)
+LV_IMG_DECLARE(tuner_font_image_sharp)
 
 //
 // Function Definitions
 //
 void needle_create_ruler(lv_obj_t * parent);
 void needle_create_labels(lv_obj_t * parent);
-void needle_set_note_name_cb(lv_timer_t * timer);
 void needle_update_note_name(TunerNoteName new_value);
 
 //
@@ -37,12 +44,12 @@ lv_obj_t *needle_parent_screen = NULL;
 // can be avoided if it is the same.
 TunerNoteName needle_last_displayed_note = NOTE_NONE;
 
+lv_obj_t *needle_note_name_img;
+lv_obj_t *needle_sharp_img;
+
 lv_anim_t needle_pitch_animation;
 lv_coord_t needle_last_pitch_indicator_pos = (lv_coord_t)0.0;
 lv_timer_t *needle_note_name_update_timer = NULL;
-
-static lv_obj_t *needle_note_name_label;
-lv_style_t needle_note_name_label_style;
 
 lv_obj_t *needle_frequency_label;
 lv_style_t needle_frequency_label_style;
@@ -63,12 +70,6 @@ void needle_gui_init(lv_obj_t *screen) {
     needle_parent_screen = screen;
     needle_create_ruler(screen);
     needle_create_labels(screen);
-
-    // Create a new timer that will fire. This will
-    // debounce the calls to the UI to update the note name.
-    needle_note_name_update_timer = lv_timer_create(needle_set_note_name_cb, userSettings->noteDebounceInterval, NULL);
-    lv_timer_pause(needle_note_name_update_timer);
-    lv_timer_reset(needle_note_name_update_timer);
 }
 
 void needle_gui_display_frequency(float frequency, TunerNoteName note_name, float cents) {
@@ -95,7 +96,6 @@ void needle_gui_display_frequency(float frequency, TunerNoteName note_name, floa
             indicator_x_pos = segment_index * segment_width_pixels; 
         }
 
-        // lv_obj_align(needle_pitch_indicator_bar, LV_ALIGN_TOP_MID, indicator_x_pos, 18);
         lv_anim_set_values(&needle_pitch_animation, needle_last_pitch_indicator_pos, indicator_x_pos);
         needle_last_pitch_indicator_pos = indicator_x_pos;
 
@@ -103,7 +103,6 @@ void needle_gui_display_frequency(float frequency, TunerNoteName note_name, floa
         lv_obj_clear_flag(needle_pitch_indicator_bar, LV_OBJ_FLAG_HIDDEN);
 
         lv_label_set_text_fmt(needle_cents_label, "%.1f", cents);
-        // lv_obj_align(needle_cents_label, LV_ALIGN_CENTER, indicator_x_pos, 4);
         lv_obj_clear_flag(needle_cents_label, LV_OBJ_FLAG_HIDDEN);
 
         lv_anim_start(&needle_pitch_animation);
@@ -155,7 +154,6 @@ void needle_create_ruler(lv_obj_t * parent) {
     lv_obj_set_style_text_align(needle_cents_label, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(needle_cents_label, LV_ALIGN_BOTTOM_MID, 0, 0);
     lv_obj_add_flag(needle_cents_label, LV_OBJ_FLAG_HIDDEN);
-
 
     // Create a container for the ruler
     lv_obj_t * ruler_container = lv_obj_create(parent);
@@ -220,28 +218,27 @@ void needle_create_ruler(lv_obj_t * parent) {
 }
 
 void needle_create_labels(lv_obj_t * parent) {
-    // Note Name Label (the big font at the bottom middle)
-    needle_note_name_label = lv_label_create(parent);
-    lv_label_set_long_mode(needle_note_name_label, LV_LABEL_LONG_CLIP);
+    needle_note_name_img = lv_image_create(parent);
+    lv_image_set_src(needle_note_name_img, &tuner_font_image_none);
+    lv_obj_align(needle_note_name_img, LV_ALIGN_CENTER, 0, 20); // Offset down by 20 pixels
 
-    lv_label_set_text_static(needle_note_name_label, no_freq_name);
-    lv_obj_set_width(needle_note_name_label, screen_width);
-    lv_obj_set_style_text_align(needle_note_name_label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_align(needle_note_name_label, LV_ALIGN_CENTER, 0, 0);
+    needle_sharp_img = lv_image_create(parent);
+    lv_image_set_src(needle_sharp_img, &tuner_font_image_sharp);
 
-    lv_style_init(&needle_note_name_label_style);    
-    lv_style_set_text_font(&needle_note_name_label_style, &raleway_128);
+    lv_obj_align_to(needle_sharp_img, needle_note_name_img, LV_ALIGN_TOP_RIGHT, 50, -25);
+    lv_obj_add_flag(needle_sharp_img, LV_OBJ_FLAG_HIDDEN);
     
+    // Enable recoloring on the images
+    lv_obj_set_style_img_recolor_opa(needle_note_name_img, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_img_recolor_opa(needle_sharp_img, LV_OPA_COVER, LV_PART_MAIN);
     lv_palette_t palette = userSettings->noteNamePalette;
     if (palette == LV_PALETTE_NONE) {
-        lv_style_set_text_color(&needle_note_name_label_style, lv_color_white());
+        lv_obj_set_style_img_recolor(needle_note_name_img, lv_color_white(), 0);
+        lv_obj_set_style_img_recolor(needle_sharp_img, lv_color_white(), 0);
     } else {
-        lv_style_set_text_color(&needle_note_name_label_style, lv_palette_main(palette));
+        lv_obj_set_style_img_recolor(needle_note_name_img, lv_palette_main(palette), 0);
+        lv_obj_set_style_img_recolor(needle_sharp_img, lv_palette_main(palette), 0);
     }
-
-    lv_obj_add_style(needle_note_name_label, &needle_note_name_label_style, 0);
-
-    lv_obj_align(needle_note_name_label, LV_ALIGN_CENTER, 0, 20); // Offset down by 20 pixels
 
     // Frequency Label (very bottom)
     needle_frequency_label = lv_label_create(parent);
@@ -257,31 +254,54 @@ void needle_create_labels(lv_obj_t * parent) {
     lv_obj_add_style(needle_frequency_label, &needle_frequency_label_style, 0);
 }
 
-void needle_set_note_name_cb(lv_timer_t * timer) {
-    // The note name is in the timer's user data
-    // ESP_LOGI("LOCK", "locking in needle_set_note_name_cb");
-    if (!lvgl_port_lock(0)) {
-        return;
-    }
-
-    // TODO: Maybe change this to use images instead of const char*
-    // because the app is crashing too often with this mechanism.
-    const char *note_name = (const char *)lv_timer_get_user_data(timer);    
-    lv_label_set_text_static(needle_note_name_label, note_name);
-
-    lv_timer_pause(timer);
-
-    // ESP_LOGI("LOCK", "unlocking in needle_set_note_name_cb");
-    lvgl_port_unlock();
-    // ESP_LOGI("LOCK", "unlocked in needle_set_note_name_cb");
-}
-
 void needle_update_note_name(TunerNoteName new_value) {
     // Set the note name with a timer so it doesn't get
     // set too often for LVGL. ADC makes it run SUPER
     // fast and can crash the software.
-    lv_timer_set_user_data(needle_note_name_update_timer, (void *)note_names[(int)new_value]);
-    lv_timer_set_period(needle_note_name_update_timer, (uint32_t)userSettings->noteDebounceInterval);
-    lv_timer_reset(needle_note_name_update_timer);
-    lv_timer_resume(needle_note_name_update_timer);
+    const lv_image_dsc_t *img_desc;
+    bool show_sharp_symbol = false;
+    switch (new_value) {
+    case NOTE_A_SHARP:
+        show_sharp_symbol = true;
+    case NOTE_A:
+        img_desc = &tuner_font_image_a;
+        break;
+    case NOTE_B:
+        img_desc = &tuner_font_image_b;
+        break;
+    case NOTE_C_SHARP:
+        show_sharp_symbol = true;
+    case NOTE_C:
+        img_desc = &tuner_font_image_c;
+        break;
+    case NOTE_D_SHARP:
+        show_sharp_symbol = true;
+    case NOTE_D:
+        img_desc = &tuner_font_image_d;
+        break;
+    case NOTE_E:
+        img_desc = &tuner_font_image_e;
+        break;
+    case NOTE_F_SHARP:
+        show_sharp_symbol = true;
+    case NOTE_F:
+        img_desc = &tuner_font_image_f;
+        break;
+    case NOTE_G_SHARP:
+        show_sharp_symbol = true;
+    case NOTE_G:
+        img_desc = &tuner_font_image_g;
+        break;
+    default:
+        img_desc = &tuner_font_image_none;
+        break;
+    }
+
+    if (show_sharp_symbol) {
+        lv_obj_remove_flag(needle_sharp_img, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(needle_sharp_img, LV_OBJ_FLAG_HIDDEN);
+    }
+
+    lv_image_set_src(needle_note_name_img, img_desc);
 }

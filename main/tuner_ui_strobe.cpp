@@ -10,7 +10,10 @@
 #include "globals.h"
 #include "UserSettings.h"
 
+#include "esp_log.h"
 #include "esp_lvgl_port.h"
+
+static const char *STROBE = "STROBE";
 
 /// The strobe works by changing the rotation of the lv_arc widgets by a certain
 /// amount each time it receives a frequency. Changing the rotation too much
@@ -22,14 +25,21 @@ extern UserSettings *userSettings;
 extern lv_coord_t screen_width;
 extern lv_coord_t screen_height;
 
-extern "C" const lv_font_t raleway_128;
+LV_IMG_DECLARE(tuner_font_image_a)
+LV_IMG_DECLARE(tuner_font_image_b)
+LV_IMG_DECLARE(tuner_font_image_c)
+LV_IMG_DECLARE(tuner_font_image_d)
+LV_IMG_DECLARE(tuner_font_image_e)
+LV_IMG_DECLARE(tuner_font_image_f)
+LV_IMG_DECLARE(tuner_font_image_g)
+LV_IMG_DECLARE(tuner_font_image_none)
+LV_IMG_DECLARE(tuner_font_image_sharp)
 
 //
 // Function Definitions
 //
-void strobe_create_arcs(lv_obj_t * parent);
 void strobe_create_labels(lv_obj_t * parent);
-void strobe_set_note_name_cb(lv_timer_t * timer);
+void strobe_create_arcs(lv_obj_t * parent);
 void strobe_update_note_name(TunerNoteName new_value);
 
 //
@@ -41,10 +51,8 @@ lv_obj_t *strobe_parent_screen = NULL;
 // can be avoided if it is the same.
 TunerNoteName strobe_last_displayed_note = NOTE_NONE;
 
-lv_timer_t *strobe_note_name_update_timer = NULL;
-
-static lv_obj_t *strobe_note_name_label;
-lv_style_t strobe_note_name_label_style;
+lv_obj_t *strobe_note_name_img;
+lv_obj_t *strobe_sharp_img;
 
 lv_obj_t *strobe_frequency_label;
 lv_style_t strobe_frequency_label_style;
@@ -68,14 +76,8 @@ const char * strobe_gui_get_name() {
 
 void strobe_gui_init(lv_obj_t *screen) {
     strobe_parent_screen = screen;
-    strobe_create_arcs(screen);
     strobe_create_labels(screen);
-
-    // Create a new timer that will fire. This will
-    // debounce the calls to the UI to update the note name.
-    strobe_note_name_update_timer = lv_timer_create(strobe_set_note_name_cb, userSettings->noteDebounceInterval, NULL);
-    lv_timer_pause(strobe_note_name_update_timer);
-    lv_timer_reset(strobe_note_name_update_timer);
+    strobe_create_arcs(screen);
 }
 
 void strobe_gui_display_frequency(float frequency, TunerNoteName note_name, float cents) {
@@ -139,19 +141,67 @@ void strobe_gui_cleanup() {
     // TODO: Do any cleanup needed here. 
 }
 
+void strobe_create_labels(lv_obj_t * parent) {
+    // Note Name Image (the big name in the middle of the screen)
+    strobe_note_name_img = lv_image_create(parent);
+    lv_image_set_src(strobe_note_name_img, &tuner_font_image_none);
+    lv_obj_center(strobe_note_name_img);
+
+    strobe_sharp_img = lv_image_create(parent);
+    lv_image_set_src(strobe_sharp_img, &tuner_font_image_sharp);
+
+    lv_obj_align_to(strobe_sharp_img, strobe_note_name_img, LV_ALIGN_TOP_RIGHT, 70, -45);
+    lv_obj_add_flag(strobe_sharp_img, LV_OBJ_FLAG_HIDDEN);
+    
+    // Enable recoloring on the images
+    lv_obj_set_style_img_recolor_opa(strobe_note_name_img, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_img_recolor_opa(strobe_sharp_img, LV_OPA_COVER, LV_PART_MAIN);
+    lv_palette_t palette = userSettings->noteNamePalette;
+    if (palette == LV_PALETTE_NONE) {
+        lv_obj_set_style_img_recolor(strobe_note_name_img, lv_color_white(), 0);
+        lv_obj_set_style_img_recolor(strobe_sharp_img, lv_color_white(), 0);
+    } else {
+        lv_obj_set_style_img_recolor(strobe_note_name_img, lv_palette_main(palette), 0);
+        lv_obj_set_style_img_recolor(strobe_sharp_img, lv_palette_main(palette), 0);
+    }
+
+    // Frequency Label (very bottom)
+    strobe_frequency_label = lv_label_create(parent);
+    lv_label_set_long_mode(strobe_frequency_label, LV_LABEL_LONG_CLIP);
+
+    lv_label_set_text_static(strobe_frequency_label, no_freq_name);
+    lv_obj_set_width(strobe_frequency_label, screen_width);
+    lv_obj_set_style_text_align(strobe_frequency_label, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_obj_align(strobe_frequency_label, LV_ALIGN_BOTTOM_RIGHT, 0, 0);
+
+    lv_style_init(&strobe_frequency_label_style);
+    lv_style_set_text_font(&strobe_frequency_label_style, &lv_font_montserrat_14);
+    lv_obj_add_style(strobe_frequency_label, &strobe_frequency_label_style, 0);
+    lv_obj_add_flag(strobe_frequency_label, LV_OBJ_FLAG_HIDDEN);
+
+    // Cents display
+    strobe_cents_label = lv_label_create(parent);
+    
+    lv_style_init(&strobe_cents_label_style);
+    lv_style_set_text_font(&strobe_cents_label_style, &lv_font_montserrat_14);
+    lv_obj_add_style(strobe_cents_label, &strobe_cents_label_style, 0);
+
+    lv_obj_set_width(strobe_cents_label, screen_width / 2);
+    lv_obj_set_style_text_align(strobe_cents_label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(strobe_cents_label, LV_ALIGN_BOTTOM_MID, 0, 0);
+    lv_obj_add_flag(strobe_cents_label, LV_OBJ_FLAG_HIDDEN);
+}
+
 void strobe_create_arcs(lv_obj_t * parent) {
     strobe_arc_container = lv_obj_create(parent);
     lv_obj_set_size(strobe_arc_container, lv_pct(100), lv_pct(100));
-    lv_obj_set_style_bg_color(strobe_arc_container, lv_color_black(), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(strobe_arc_container, LV_OPA_0, 0);
     lv_obj_set_style_border_width(strobe_arc_container, 0, 0);
     lv_obj_center(strobe_arc_container);
 
     strobe_arc1 = lv_arc_create(strobe_arc_container);
     strobe_arc2 = lv_arc_create(strobe_arc_container);
     strobe_arc3 = lv_arc_create(strobe_arc_container);
-    // lv_arc_set_rotation(strobe_arc1, 0);
-    // lv_arc_set_rotation(strobe_arc2, 120);
-    // lv_arc_set_rotation(strobe_arc1, 240);
 
     lv_obj_remove_style(strobe_arc1, NULL, LV_PART_KNOB); // Don't show a knob
     lv_obj_remove_style(strobe_arc2, NULL, LV_PART_KNOB); // Don't show a knob
@@ -165,9 +215,13 @@ void strobe_create_arcs(lv_obj_t * parent) {
     lv_obj_set_size(strobe_arc2, 200, 200);
     lv_obj_set_size(strobe_arc3, 200, 200);
 
-    lv_obj_set_style_arc_width(strobe_arc1, 20, LV_PART_INDICATOR);
-    lv_obj_set_style_arc_width(strobe_arc2, 20, LV_PART_INDICATOR);
-    lv_obj_set_style_arc_width(strobe_arc3, 20, LV_PART_INDICATOR);
+    lv_obj_set_style_arc_width(strobe_arc1, 14, LV_PART_INDICATOR);
+    lv_obj_set_style_arc_width(strobe_arc2, 14, LV_PART_INDICATOR);
+    lv_obj_set_style_arc_width(strobe_arc3, 14, LV_PART_INDICATOR);
+
+    lv_obj_set_style_arc_color(strobe_arc1, lv_color_white(), LV_PART_INDICATOR);
+    lv_obj_set_style_arc_color(strobe_arc2, lv_color_white(), LV_PART_INDICATOR);
+    lv_obj_set_style_arc_color(strobe_arc3, lv_color_white(), LV_PART_INDICATOR);
 
     lv_obj_center(strobe_arc1);
     lv_obj_center(strobe_arc2);
@@ -183,79 +237,54 @@ void strobe_create_arcs(lv_obj_t * parent) {
     lv_obj_set_style_arc_opa(strobe_arc3, LV_OPA_0, 0);
 }
 
-void strobe_create_labels(lv_obj_t * parent) {
-    // Note Name Label (the big font at the bottom middle)
-    strobe_note_name_label = lv_label_create(parent);
-    lv_label_set_long_mode(strobe_note_name_label, LV_LABEL_LONG_CLIP);
-
-    lv_label_set_text_static(strobe_note_name_label, no_freq_name);
-    lv_obj_set_width(strobe_note_name_label, screen_width);
-    lv_obj_set_style_text_align(strobe_note_name_label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_align(strobe_note_name_label, LV_ALIGN_CENTER, 0, 0);
-
-    lv_style_init(&strobe_note_name_label_style);    
-    lv_style_set_text_font(&strobe_note_name_label_style, &raleway_128);
-    
-    lv_palette_t palette = userSettings->noteNamePalette;
-    if (palette == LV_PALETTE_NONE) {
-        lv_style_set_text_color(&strobe_note_name_label_style, lv_color_white());
-    } else {
-        lv_style_set_text_color(&strobe_note_name_label_style, lv_palette_main(palette));
-    }
-
-    lv_obj_add_style(strobe_note_name_label, &strobe_note_name_label_style, 0);
-
-    lv_obj_align(strobe_note_name_label, LV_ALIGN_CENTER, 0, 0);
-
-    // Frequency Label (very bottom)
-    strobe_frequency_label = lv_label_create(parent);
-    lv_label_set_long_mode(strobe_frequency_label, LV_LABEL_LONG_CLIP);
-
-    lv_label_set_text_static(strobe_frequency_label, no_freq_name);
-    lv_obj_set_width(strobe_frequency_label, screen_width);
-    lv_obj_set_style_text_align(strobe_frequency_label, LV_TEXT_ALIGN_RIGHT, 0);
-    lv_obj_align(strobe_frequency_label, LV_ALIGN_BOTTOM_RIGHT, 0, 0);
-
-    lv_style_init(&strobe_frequency_label_style);
-    lv_style_set_text_font(&strobe_frequency_label_style, &lv_font_montserrat_14);
-    lv_obj_add_style(strobe_frequency_label, &strobe_frequency_label_style, 0);
-
-    // Cents display
-    strobe_cents_label = lv_label_create(parent);
-    
-    lv_style_init(&strobe_cents_label_style);
-    lv_style_set_text_font(&strobe_cents_label_style, &lv_font_montserrat_14);
-    lv_obj_add_style(strobe_cents_label, &strobe_cents_label_style, 0);
-
-    lv_obj_set_width(strobe_cents_label, screen_width / 2);
-    lv_obj_set_style_text_align(strobe_cents_label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_align(strobe_cents_label, LV_ALIGN_BOTTOM_MID, 0, 0);
-    lv_obj_add_flag(strobe_cents_label, LV_OBJ_FLAG_HIDDEN);
-
-}
-
-void strobe_set_note_name_cb(lv_timer_t * timer) {
-    // The note name is in the timer's user data
-    if (!lvgl_port_lock(0)) {
-        return;
-    }
-
-    // TODO: Maybe change this to use images instead of const char*
-    // because the app is crashing too often with this mechanism.
-    const char *note_name = (const char *)lv_timer_get_user_data(timer);
-    lv_label_set_text_static(strobe_note_name_label, note_name);
-
-    lv_timer_pause(timer);
-
-    lvgl_port_unlock();
-}
-
 void strobe_update_note_name(TunerNoteName new_value) {
     // Set the note name with a timer so it doesn't get
     // set too often for LVGL. ADC makes it run SUPER
     // fast and can crash the software.
-    lv_timer_set_user_data(strobe_note_name_update_timer, (void *)note_names[(int)new_value]);
-    lv_timer_set_period(strobe_note_name_update_timer, (uint32_t)userSettings->noteDebounceInterval);
-    lv_timer_reset(strobe_note_name_update_timer);
-    lv_timer_resume(strobe_note_name_update_timer);
+    const lv_image_dsc_t *img_desc;
+    bool show_sharp_symbol = false;
+    switch (new_value) {
+    case NOTE_A_SHARP:
+        show_sharp_symbol = true;
+    case NOTE_A:
+        img_desc = &tuner_font_image_a;
+        break;
+    case NOTE_B:
+        img_desc = &tuner_font_image_b;
+        break;
+    case NOTE_C_SHARP:
+        show_sharp_symbol = true;
+    case NOTE_C:
+        img_desc = &tuner_font_image_c;
+        break;
+    case NOTE_D_SHARP:
+        show_sharp_symbol = true;
+    case NOTE_D:
+        img_desc = &tuner_font_image_d;
+        break;
+    case NOTE_E:
+        img_desc = &tuner_font_image_e;
+        break;
+    case NOTE_F_SHARP:
+        show_sharp_symbol = true;
+    case NOTE_F:
+        img_desc = &tuner_font_image_f;
+        break;
+    case NOTE_G_SHARP:
+        show_sharp_symbol = true;
+    case NOTE_G:
+        img_desc = &tuner_font_image_g;
+        break;
+    default:
+        img_desc = &tuner_font_image_none;
+        break;
+    }
+
+    if (show_sharp_symbol) {
+        lv_obj_remove_flag(strobe_sharp_img, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(strobe_sharp_img, LV_OBJ_FLAG_HIDDEN);
+    }
+
+    lv_image_set_src(strobe_note_name_img, img_desc);
 }
