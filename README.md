@@ -37,6 +37,9 @@ The ESP32 board is a ESP32-2432S028R (ESP32-WROOM-32: https://www.espressif.com/
 
 ## Demo
 
-Here's a simple demo of how the project is coming along as of 20 Aug 2024:
+Here's a simple demo of how the project is coming along as of 10 Dec 2024:
+[![Demo Video](https://img.youtube.com/vi/im-Qe8d9LSk/0.jpg)]([https://youtu.be/im-Qe8d9LSk](https://youtu.be/im-Qe8d9LSk)
+
+Here's an older demo, more of a proof-of-concept on a smaller screen using a Heltec ESP32-S3 (20 Aug 2024):
 
 [![Demo Video](https://img.youtube.com/vi/XWTicIlTI_k/0.jpg)](https://youtu.be/XWTicIlTI_k)
