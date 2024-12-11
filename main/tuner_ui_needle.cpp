@@ -225,7 +225,7 @@ void needle_create_labels(lv_obj_t * parent) {
     needle_sharp_img = lv_image_create(parent);
     lv_image_set_src(needle_sharp_img, &tuner_font_image_sharp);
 
-    lv_obj_align_to(needle_sharp_img, needle_note_name_img, LV_ALIGN_TOP_RIGHT, 50, -25);
+    lv_obj_align_to(needle_sharp_img, needle_note_name_img, LV_ALIGN_TOP_RIGHT, 20, -15);
     lv_obj_add_flag(needle_sharp_img, LV_OBJ_FLAG_HIDDEN);
     
     // Enable recoloring on the images
