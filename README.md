@@ -26,14 +26,13 @@ The ESP32 board is a ESP32-2432S028R (ESP32-WROOM-32: https://www.espressif.com/
     - Plug in your ESP32 dev board and wait for a few seconds
     - Open the Command Palette (Command+Shift+P on a Mac) and select `ESP-IDF: Select Port to Use (COM, tty, usbserial)`
     - Select your port from the drop-down list that appears
+    - Windows Only: If you receive an error while trying to locate the serial/COM port that your ESP32 is connected to (or it doesn't show up), you may need to install the driver for the CH340C UART chip that the ESP32-CYD uses for USB communication. The driver is available from the manufacturer here: https://www.wch-ic.com/downloads/CH341SER_ZIP.html
+        - After installing the driver and connecting the CYD, re-run the "Select Port" command
 10. Attempt to build the software
     - Use the Command Palette and select `ESP-IDF: Build your Project`
 11. Assuming step #9 worked, Build and install the software
     - Use the Command Palette and select `ESP-IDF: Build, Flash, and Start a Monitor on your Device`
     - To stop monitoring the output, press Control+T, then X
-    - Windows Only: If you receive an error while building, try selecting each port in the list and if none build correctly, follow these instructions:
-        - Download and install the CP210x Windows Drivers from Silicon Labs
-        - A new port should then show up in the list
 
 ## Demo
 
