@@ -8,6 +8,8 @@
 
 #include "tuner_ui_interface.h"
 
+static const char *TAG = "Settings";
+
 extern TunerGUIInterface available_guis[1]; // defined in tuner_gui_task.cpp
 extern size_t num_of_available_guis;
 
@@ -129,6 +131,7 @@ static void handleExitButtonClicked(lv_event_t *e);
 //
 
 void UserSettings::loadSettings() {
+    ESP_LOGI(TAG, "load settings");
     nvs_flash_init();
     nvs_open("settings", NVS_READWRITE, &nvsHandle);
 
@@ -206,7 +209,8 @@ void UserSettings::setIsShowingSettings(bool isShowing) {
 // PUBLIC Methods
 //
 
-UserSettings::UserSettings(settings_changed_cb_t changedCallback, settings_will_exit_cb_t exitCallback) {
+UserSettings::UserSettings(settings_will_show_cb_t showCallback, settings_changed_cb_t changedCallback, settings_will_exit_cb_t exitCallback) {
+    settingsWillShowCallback = showCallback;
     settingsChangedCallback = changedCallback;
     settingsWillExitCallback = exitCallback;
     loadSettings();
@@ -221,6 +225,7 @@ bool UserSettings::isShowingSettings() {
 }
 
 void UserSettings::saveSettings() {
+    ESP_LOGI(TAG, "save settings");
     uint8_t value;
     uint32_t value32;
 
@@ -297,6 +302,7 @@ void UserSettings::setDisplayAndScreen(lv_display_t *display, lv_obj_t *screen) 
 }
 
 void UserSettings::showSettings() {
+    settingsWillShowCallback();
     setIsShowingSettings(true);
     const char *symbolNames[] = {
         LV_SYMBOL_HOME,
