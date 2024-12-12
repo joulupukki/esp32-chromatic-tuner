@@ -32,6 +32,7 @@ enum TunerOrientation: uint8_t {
     orientationUpsideDown,
 };
 
+typedef void (*settings_will_show_cb_t)();
 typedef void (*settings_changed_cb_t)();
 typedef void (*settings_will_exit_cb_t)();
 
@@ -52,6 +53,7 @@ class UserSettings {
     nvs_handle_t    nvsHandle;
     bool isShowingMenu = false;
 
+    settings_will_show_cb_t settingsWillShowCallback;
     settings_changed_cb_t settingsChangedCallback;
     settings_will_exit_cb_t settingsWillExitCallback;
 
@@ -79,7 +81,7 @@ public:
     /**
      * @brief Create the settings object and sets its parameters
      */
-    UserSettings(settings_changed_cb_t settingsChangedCallback, settings_will_exit_cb_t settingsWillExitCallback);
+    UserSettings(settings_will_show_cb_t showCallback, settings_changed_cb_t changedCallback, settings_will_exit_cb_t exitCallback);
 
     /// @brief Know if the settings menu is being shown (thread safe).
     /// @return Returns `true` if the settings menu is currently showing.

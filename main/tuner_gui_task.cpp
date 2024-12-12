@@ -55,6 +55,25 @@ lv_obj_t *main_screen = NULL;
 
 bool is_gui_loaded = false;
 
+//
+// GPIO Footswitch and Relay Pin Variables
+//
+
+// Keep track of what the relay state is so the app doesn't have to keep making
+// calls to set it over and over (which chews up CPU).
+// uint32_t current_relay_gpio_level = 0; // Off at launch
+
+// int last_footswitch_state = 1; // Assume initial state is open (active-high logic and conveniently matches the physical position of the footswitch)
+// int footswitch_press_count = 0;
+// int64_t footswitch_press_start_time = 0;
+// int64_t last_footswitch_press_time = 0;
+
+//
+// Local Function Declarations
+//
+// void configure_gpio_pins();
+// void handle_gpio_pins();
+
 ///
 /// Add the different GUIs here.
 ///
@@ -132,7 +151,11 @@ void tuner_gui_task(void *pvParameter) {
 
     float cents;
 
+    // configure_gpio_pins();
+
     while(1) {
+        // handle_gpio_pins();
+
         lv_task_handler();
 
         // Lock the mutex due to the LVGL APIs are not thread-safe
@@ -238,7 +261,6 @@ void create_settings_menu_button(lv_obj_t * parent) {
     lv_obj_align(btn, LV_ALIGN_BOTTOM_LEFT, 20, -20);
 }
 
-
 static esp_err_t app_lvgl_main() {
     // ESP_LOGI("LOCK", "locking in app_lvgl_main");
     lvgl_port_lock(0);
@@ -261,3 +283,74 @@ static esp_err_t app_lvgl_main() {
 
     return ESP_OK;
 }
+
+// void configure_gpio_pins() {
+//     // Configure GPIO 27 as an input pin
+//     gpio_config_t gpio_27_conf = {
+//         .pin_bit_mask = (1ULL << FOOT_SWITCH_GPIO),
+//         .mode = GPIO_MODE_INPUT,
+//         .pull_up_en = GPIO_PULLUP_ENABLE,   // Enable internal pull-up resistor
+//         .pull_down_en = GPIO_PULLDOWN_DISABLE,
+//         .intr_type = GPIO_INTR_DISABLE      // Disable interrupt for this pin
+//     };
+
+//     gpio_config(&gpio_27_conf);
+
+//     // Configure GPIO 22 as an output pin
+//     gpio_config_t gpio_22_conf = {
+//         .pin_bit_mask = (1ULL << RELAY_GPIO),
+//         .mode = GPIO_MODE_OUTPUT,
+//         .pull_up_en = GPIO_PULLUP_DISABLE,
+//         .pull_down_en = GPIO_PULLDOWN_DISABLE,
+//         .intr_type = GPIO_INTR_DISABLE
+//     };
+
+//     gpio_config(&gpio_22_conf);
+
+//     // TODO: Read the initial state of the foot switch. If it's a 0, that means
+//     // the user had it pressed at power up and we may want to do something
+//     // special.
+// }
+
+// void handle_gpio_pins() {
+
+//     // Detect press, double-press, and long press.
+
+//     int current_footswitch_state = gpio_get_level(FOOT_SWITCH_GPIO);
+
+//     if (current_footswitch_state == 0 && last_footswitch_state == 1) {
+//         // Button pressed
+//         footswitch_press_start_time = esp_timer_get_time() / 1000; // Get time in ms
+//         int64_t now = footswitch_press_start_time;
+
+//         if ((now - last_footswitch_press_time) <= DOUBLE_CLICK_THRESHOLD) {
+//             footswitch_press_count++;
+//         } else {
+//             footswitch_press_count = 1;
+//         }
+
+//         last_footswitch_press_time = now;
+//     }
+
+//     if (current_footswitch_state == 1 && last_footswitch_state == 0) {
+//         // Button released
+//         int64_t footswitch_press_duration = (esp_timer_get_time() / 1000) - footswitch_press_start_time;
+
+//         if (footswitch_press_duration >= LONG_PRESS_THRESHOLD) {
+//             ESP_LOGI(TAG, "Long press detected");
+//             vTaskDelay(pdMS_TO_TICKS(200)); // Small delay for visual feedback
+//         } else if (footswitch_press_count == 2) {
+//             ESP_LOGI(TAG, "Double press detected");
+//             vTaskDelay(pdMS_TO_TICKS(200)); // Small delay for visual feedback
+//         } else {
+//             ESP_LOGI(TAG, "Normal press detected");
+//             vTaskDelay(pdMS_TO_TICKS(200)); // Small delay for visual feedback
+//         }
+//     }
+
+//     // gpio_set_level(RELAY_GPIO, 1); // Turn on GPIO 22
+//     // current_relay_gpio_level = 1;
+
+//     // gpio_set_level(RELAY_GPIO, 0); // Turn off GPIO 22
+//     // current_relay_gpio_level = 0;
+// }

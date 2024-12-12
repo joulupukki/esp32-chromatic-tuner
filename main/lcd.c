@@ -36,6 +36,7 @@ esp_err_t lcd_display_brightness_init(void)
         .timer_sel = 1,
         .duty = 0,
         .hpoint = 0,
+        // .flags.output_invert = true // potentially for CYD2USB
         .flags.output_invert = false
     };
  
@@ -126,6 +127,7 @@ esp_err_t app_lcd_init(esp_lcd_panel_io_handle_t *lcd_io, esp_lcd_panel_handle_t
         .bits_per_pixel = LCD_BITS_PIXEL,
     };
 
+    // esp_err_t r = esp_lcd_new_panel_st7789(*lcd_io, &panel_config, lcd_panel); // For CYD2USB
     esp_err_t r = esp_lcd_new_panel_ili9341(*lcd_io, &panel_config, lcd_panel);
 
     esp_lcd_panel_reset(*lcd_panel);

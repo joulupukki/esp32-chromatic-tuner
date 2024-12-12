@@ -14,10 +14,14 @@
 #include "pitch_detector_task.h"
 #include "tuner_gui_task.h"
 
+extern void gpio_task(void *pvParameter);
 extern void tuner_gui_task(void *pvParameter);
 extern void pitch_detector_task(void *pvParameter);
 
 UserSettings *userSettings;
+
+TaskHandle_t gpioTaskHandle;
+TaskHandle_t detectorTaskHandle;
 
 /* GPIO PINS
 
@@ -37,6 +41,11 @@ GPIO 27 - Momentary foot switch input
 
 static const char *TAG = "TUNER";
 
+void user_settings_will_show_cb() {
+    vTaskSuspend(gpioTaskHandle); // Without pausing this NVS failed to work (crashes the app)
+    vTaskSuspend(detectorTaskHandle);
+}
+
 void user_settings_changed_cb() {
     update_pitch_detector_user_settings();
     user_settings_updated();
@@ -45,21 +54,34 @@ void user_settings_changed_cb() {
 /// @brief Called right before user settings exits back to the main tuner UI.
 void user_settings_will_exit_cb() {
     user_settings_will_exit();
+    vTaskResume(gpioTaskHandle);
+    vTaskResume(detectorTaskHandle);
 }
 
 extern "C" void app_main() {
 
     // Initialize NVS (Persistent Flash Storage for User Settings)
-    userSettings = new UserSettings(user_settings_changed_cb, user_settings_will_exit_cb);
+    userSettings = new UserSettings(user_settings_will_show_cb, user_settings_changed_cb, user_settings_will_exit_cb);
     user_settings_changed_cb(); // Calling this allows the pitch detector and tuner UI to initialize properly with current user
+
+    // Start the GPIO Task
+    xTaskCreatePinnedToCore(
+        gpio_task,          // callback function
+        "gpio",             // debug name of the task
+        1024,               // stack depth (no idea what this should be)
+        NULL,               // params to pass to the callback function
+        0,                  // ux priority - higher value is higher priority
+        &gpioTaskHandle,    // handle to the created task - we don't need it
+        0                   // Core ID - since we're not using Bluetooth/Wi-Fi, this can be 0 (the protocol CPU)
+    );
 
     // Start the Display Task
     xTaskCreatePinnedToCore(
         tuner_gui_task,     // callback function
         "tuner_gui",        // debug name of the task
-        32768,              // stack depth (no idea what this should be)
+        16384,              // stack depth (no idea what this should be)
         NULL,               // params to pass to the callback function
-        0,                  // ux priority - higher value is higher priority
+        1,                  // ux priority - higher value is higher priority
         NULL,               // handle to the created task - we don't need it
         0                   // Core ID - since we're not using Bluetooth/Wi-Fi, this can be 0 (the protocol CPU)
     );
@@ -70,8 +92,8 @@ extern "C" void app_main() {
         "pitch_detector",       // debug name of the task
         4096,                   // stack depth (no idea what this should be)
         NULL,                   // params to pass to the callback function
-        1,                      // This has to be higher than the tuner_gui task or frequency readings aren't as accurate
-        NULL,                   // handle to the created task - we don't need it
+        10,                     // This has to be higher than the tuner_gui task or frequency readings aren't as accurate
+        &detectorTaskHandle,    // handle to the created task - we don't need it
         1                       // Core ID
     );
 }
