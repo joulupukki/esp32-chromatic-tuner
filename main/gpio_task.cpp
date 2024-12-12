@@ -7,6 +7,7 @@
 
 #include "defines.h"
 #include "globals.h"
+#include "UserSettings.h"
 
 #include "lvgl.h"
 #include "esp_lvgl_port.h"
@@ -15,6 +16,8 @@
 #include "esp_timer.h"
 
 static const char *TAG = "GPIO";
+
+extern UserSettings *userSettings;
 
 // Keep track of what the relay state is so the app doesn't have to keep making
 // calls to set it over and over (which chews up CPU).
@@ -31,6 +34,9 @@ bool footswitch_long_press_triggered = false;
 //
 void configure_gpio_pins();
 void handle_gpio_pins();
+void handle_normal_press();
+void handle_double_press();
+void handle_long_press();
 
 void gpio_task(void *pvParameter) {
     ESP_LOGI(TAG, "GPIO task started");
@@ -98,9 +104,9 @@ void handle_gpio_pins() {
         int64_t press_duration = (esp_timer_get_time() / 1000) - footswitch_start_time;
 
         if (press_duration >= LONG_PRESS_THRESHOLD && !footswitch_long_press_triggered) {
-            ESP_LOGI(TAG, "LONG PRESS detected");
-            vTaskDelay(pdMS_TO_TICKS(200)); // Small delay for visual feedback
+            handle_long_press();
             footswitch_long_press_triggered = true; // Ensure long press is only triggered once
+            vTaskDelay(pdMS_TO_TICKS(200)); // Small delay for visual feedback
         }
     }
 
@@ -110,10 +116,10 @@ void handle_gpio_pins() {
             int64_t press_duration = (esp_timer_get_time() / 1000) - footswitch_start_time;
 
             if (footswitch_press_count == 2) {
-                ESP_LOGI(TAG, "DOUBLE CLICK detected");
+                handle_double_press();
                 vTaskDelay(pdMS_TO_TICKS(200)); // Small delay for visual feedback
             } else if (press_duration < LONG_PRESS_THRESHOLD) {
-                ESP_LOGI(TAG, "NORMAL PRESS detected");
+                handle_normal_press();
                 vTaskDelay(pdMS_TO_TICKS(200)); // Small delay for visual feedback
             }
         }
@@ -126,4 +132,16 @@ void handle_gpio_pins() {
 
     // gpio_set_level(RELAY_GPIO, 0); // Turn off GPIO 22
     // current_relay_gpio_level = 0;
+}
+
+void handle_normal_press() {
+    ESP_LOGI(TAG, "NORMAL PRESS detected");
+}
+
+void handle_double_press() {
+    ESP_LOGI(TAG, "DOUBLE PRESS detected");
+}
+
+void handle_long_press() {
+    ESP_LOGI(TAG, "LONG PRESS detected");
 }
