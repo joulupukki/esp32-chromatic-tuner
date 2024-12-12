@@ -54,7 +54,6 @@ lv_obj_t *needle_sharp_img;
 
 lv_anim_t needle_pitch_animation;
 lv_coord_t needle_last_pitch_indicator_pos = (lv_coord_t)0.0;
-lv_timer_t *needle_note_name_update_timer = NULL;
 
 lv_obj_t *needle_frequency_label;
 lv_style_t needle_frequency_label_style;
