@@ -28,14 +28,13 @@ typedef enum {
     NOTE_NONE
 } TunerNoteName;
 
-static const char *note_names[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B", "-"};
 static const char *no_freq_name = "-";
 
 /// @brief Gets the currently-detected frequency (thread safe).
 /// @return The currently-detected frequency or -1 if no frequency is detected.
 float get_current_frequency();
 
-/// @brief Sets a newly-detected frequency.
+/// @brief Sets a newly-detected frequency (thread safe).
 /// @param new_frequency The newly-detected frequency or -1 if no frequency is detected.
 void set_current_frequency(float new_frequency);
 

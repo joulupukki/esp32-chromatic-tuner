@@ -7,6 +7,7 @@
 
 #include "defines.h"
 #include "globals.h"
+#include "tuner_controller.hpp"
 #include "UserSettings.h"
 
 #include "lvgl.h"
@@ -17,6 +18,7 @@
 
 static const char *TAG = "GPIO";
 
+extern TunerController *tunerController;
 extern UserSettings *userSettings;
 
 // Keep track of what the relay state is so the app doesn't have to keep making
@@ -76,6 +78,10 @@ void configure_gpio_pins() {
     // TODO: Read the initial state of the foot switch. If it's a 0, that means
     // the user had it pressed at power up and we may want to do something
     // special.
+
+    // Make sure the relay start out as off
+    gpio_set_level(RELAY_GPIO, 0); // Turn off GPIO 22
+    current_relay_gpio_level = 0;
 }
 
 void handle_gpio_pins() {
@@ -136,12 +142,43 @@ void handle_gpio_pins() {
 
 void handle_normal_press() {
     ESP_LOGI(TAG, "NORMAL PRESS detected");
+
+    TunerState state = tunerController->getTunerState();
+    switch (state) {
+    case tunerStateStandby:
+        ESP_LOGI(TAG, "Turning ON the relay and going to tuning mode");
+        // Turn on the relay which should mute the output
+        gpio_set_level(RELAY_GPIO, 1); // Turn on GPIO 22
+        current_relay_gpio_level = 1;
+        
+        // Go to tuning mode
+        tunerController->setTunerState(tunerStateTuning);
+        break;
+    case tunerStateTuning:
+        ESP_LOGI(TAG, "Turning OFF the relay and going to standby mode");
+        // Turn off the relay which should unmute the output
+        gpio_set_level(RELAY_GPIO, 0); // Turn off GPIO 22
+        current_relay_gpio_level = 0;
+
+        // Go to standby mode
+        tunerController->setTunerState(tunerStateStandby);
+        break;
+    default:
+        break;
+    }
 }
 
 void handle_double_press() {
     ESP_LOGI(TAG, "DOUBLE PRESS detected");
+
+    // If we decide to use this for something, we have to make it so that it
+    // reverses whatever the single press does. Take a look at Ditto+ and its
+    // double tap behavior and you'll see the same behavior.
 }
 
 void handle_long_press() {
     ESP_LOGI(TAG, "LONG PRESS detected");
+
+    // What cool thing are we going to use this for? Maybe cycle through the
+    // different tuning modes?
 }

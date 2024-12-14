@@ -7,6 +7,8 @@
 
 #include "defines.h"
 #include "globals.h"
+#include "standby_ui_blank.h"
+#include "tuner_standby_ui_interface.h"
 #include "tuner_ui_interface.h"
 #include "UserSettings.h"
 
@@ -36,13 +38,21 @@ extern "C" { // because these files are C and not C++
 
 static const char *TAG = "GUI";
 
+extern TunerController *tunerController;
 extern UserSettings *userSettings;
 extern "C" const lv_font_t fontawesome_48;
 
 // Local Function Declarations
+void update_ui(TunerState old_state, TunerState new_state);
+
+void create_standby_ui();
+void create_tuning_ui();
+void create_settings_ui();
+
 float midi_note_from_frequency(float freq);
 TunerNoteName get_pitch_name_and_cents_from_frequency(float freq, float *cents);
-void create_main_screen_ui();
+void create_standby_ui();
+void create_tuning_ui();
 void settings_button_cb(lv_event_t *e);
 void create_settings_menu_button(lv_obj_t * parent);
 static esp_err_t app_lvgl_main();
@@ -54,6 +64,14 @@ lv_display_t *lvgl_display = NULL;
 lv_obj_t *main_screen = NULL;
 
 bool is_gui_loaded = false;
+
+/// This variable is used to keep track of what state the UI is in. Initially
+/// the code would try to rebuild the UI inside of the button press handling of
+/// gpio_task but that was causing problems probably because not much memory is
+/// allocated to that task. This now allows the UI task to change after-the-fact
+/// and do the GUI changes inside tuner_gui_task.
+TunerState current_ui_tuner_state = tunerStateBooting;
+portMUX_TYPE current_ui_tuner_state_mutex = portMUX_INITIALIZER_UNLOCKED;
 
 //
 // GPIO Footswitch and Relay Pin Variables
@@ -75,7 +93,23 @@ bool is_gui_loaded = false;
 // void handle_gpio_pins();
 
 ///
-/// Add the different GUIs here.
+/// Add Standby GUIs here.
+///
+TunerStandbyGUIInterface blank_standby_gui = {
+    .get_id = blank_standby_gui_get_id,
+    .get_name = blank_standby_gui_get_name,
+    .init = blank_standby_gui_init,
+    .cleanup = blank_standby_gui_cleanup
+};
+
+TunerStandbyGUIInterface available_standby_guis[] = {
+    blank_standby_gui, // ID = 0
+};
+
+size_t num_of_available_standby_guis = 1;
+
+///
+/// Add Tuning GUIs here.
 ///
 TunerGUIInterface needle_gui = {
     .get_id = needle_gui_get_id,
@@ -104,7 +138,14 @@ TunerGUIInterface available_guis[] = {
 
 size_t num_of_available_guis = 2;
 
+TunerStandbyGUIInterface *active_standby_gui = NULL;
 TunerGUIInterface *active_gui = NULL;
+
+TunerStandbyGUIInterface get_active_standby_gui() {
+    uint8_t standby_gui_index = userSettings->standbyGUIIndex;
+    TunerStandbyGUIInterface active_standby_gui = available_standby_guis[standby_gui_index];
+    return active_standby_gui;
+}
 
 TunerGUIInterface get_active_gui() {
     uint8_t tuner_gui_index = userSettings->tunerGUIIndex;
@@ -151,15 +192,29 @@ void tuner_gui_task(void *pvParameter) {
 
     float cents;
 
-    // configure_gpio_pins();
+    // Use old_tuner_ui_state to keep track of the old state locally (in this
+    // function). When gpio_task signals that the state should change, the
+    // callback quickly writes to the current_ui_tuner_state (using a mutex) and
+    // then tuner_gui_task does the actual update inside the while loop.
+    TunerState old_tuner_ui_state = tunerController->getTunerState();
+    tunerController->setTunerState(tunerStateStandby);
 
     while(1) {
         // handle_gpio_pins();
 
         lv_task_handler();
 
-        // Lock the mutex due to the LVGL APIs are not thread-safe
-        if (userSettings != NULL && !userSettings->isShowingSettings() && lvgl_port_lock(0)) {
+        TunerState newState = tunerStateBooting;
+        portENTER_CRITICAL(&current_ui_tuner_state_mutex);
+        newState = current_ui_tuner_state;
+        portEXIT_CRITICAL(&current_ui_tuner_state_mutex);
+
+        if (old_tuner_ui_state != current_ui_tuner_state) {
+            update_ui(old_tuner_ui_state, current_ui_tuner_state);
+            old_tuner_ui_state = current_ui_tuner_state;
+        }
+
+        if (current_ui_tuner_state == tunerStateTuning && lvgl_port_lock(0)) {
             float frequency = get_current_frequency();
             if (frequency > 0) {
                 TunerNoteName note_name = get_pitch_name_and_cents_from_frequency(frequency, &cents);
@@ -170,13 +225,65 @@ void tuner_gui_task(void *pvParameter) {
             }
             // Release the mutex
             lvgl_port_unlock();
+            vTaskDelay(pdMS_TO_TICKS(125)); // Yields to reset watchdog in milliseconds
+        } else {
+            // Nothing to do
+            vTaskDelay(pdMS_TO_TICKS(200));
         }
-
-        // vTaskDelay(pdMS_TO_TICKS(1)); // ~33 times per second
-        vTaskDelay(pdMS_TO_TICKS(125)); // Yields to reset watchdog in milliseconds
-        // vTaskDelay(pdMS_TO_TICKS(50)); // Yields to reset watchdog in milliseconds
     }
     vTaskDelay(portMAX_DELAY);
+}
+
+void update_ui(TunerState old_state, TunerState new_state) {
+    if (!lvgl_port_lock(0)) {
+        return;
+    }
+
+    // Close the old UI
+    switch (old_state) {
+    case tunerStateSettings:
+        userSettings->exitSettings();
+        break;
+    case tunerStateStandby:
+        // TODO: Maybe look at setting the brightness to 0? Maybe set this up
+        // as something that can be specified by the active standby interface.
+        get_active_standby_gui().cleanup();
+        break;
+    case tunerStateTuning:
+        get_active_gui().cleanup();
+        break;
+    default:
+        break;
+    }
+
+    // Clean up any left-over LVGL objects on the main screen before loading the
+    // next UI.
+    lv_obj_clean(main_screen);
+
+    // Load the new UI
+    switch (new_state) {
+    case tunerStateSettings:
+        create_settings_ui();
+        break;
+    case tunerStateStandby:
+        create_standby_ui();
+        break;
+    case tunerStateTuning:
+        create_tuning_ui();
+        break;
+    default:
+        break;
+    }
+
+    lvgl_port_unlock();
+}
+
+void tuner_gui_task_tuner_state_changed(TunerState old_state, TunerState new_state) {
+    // Change the value of current_ui_tuner_state so the main UI thread will be
+    // able to change after the tuner state changes.
+    portENTER_CRITICAL(&current_ui_tuner_state_mutex);
+    current_ui_tuner_state = new_state;
+    portEXIT_CRITICAL(&current_ui_tuner_state_mutex);
 }
 
 void user_settings_updated() {
@@ -190,11 +297,20 @@ void user_settings_updated() {
     lvgl_port_unlock();
 }
 
-/// This is thread safe (already inside an LVGL lock).
-void user_settings_will_exit() {
-    // When the user enters user settings, the main tuner UI is destroyed so
-    // this builds it back up before they exit.
-    create_main_screen_ui();
+void create_standby_ui() {
+    get_active_standby_gui().init(main_screen);
+}
+
+void create_tuning_ui() {
+    // First build the Tuner UI
+    get_active_gui().init(main_screen);
+
+    // Place the settings button on the UI (bottom left)
+    create_settings_menu_button(main_screen);
+}
+
+void create_settings_ui() {
+    userSettings->showSettings();
 }
 
 // Function to calculate the MIDI note number from frequency
@@ -224,30 +340,9 @@ TunerNoteName get_pitch_name_and_cents_from_frequency(float freq, float *cents) 
     return (TunerNoteName)note_index;
 }
 
-void create_main_screen_ui() {
-    // First build the Tuner UI
-    get_active_gui().init(main_screen);
-
-    // Place the settings button on the UI (bottom left)
-    create_settings_menu_button(main_screen);
-}
-
 void settings_button_cb(lv_event_t *e) {
     ESP_LOGI(TAG, "Settings button clicked");
-
-    // Remove/clean up all existing UI from the main screen because the user may
-    // end up choosing a completely different UI. This should also free up
-    // memory so the settings menu will have plenty to work with.
-    if (!lvgl_port_lock(0)) {
-        return;
-    }
-
-    get_active_gui().cleanup();
-    lv_obj_clean(main_screen);
-
-    lvgl_port_unlock();
-
-    userSettings->showSettings();
+    tunerController->setTunerState(tunerStateSettings);
 }
 
 void create_settings_menu_button(lv_obj_t * parent) {
@@ -273,7 +368,7 @@ static esp_err_t app_lvgl_main() {
     lv_obj_set_scrollbar_mode(scr, LV_SCROLLBAR_MODE_OFF);
     main_screen = scr;
 
-    create_main_screen_ui();
+//    create_tuning_ui();
 
     // ESP_LOGI("LOCK", "unlocking in app_lvgl_main");
     lvgl_port_unlock();

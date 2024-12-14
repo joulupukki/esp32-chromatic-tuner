@@ -3,12 +3,15 @@
 
     Distributed under the MIT License [ https://opensource.org/licenses/MIT ]
 =============================================================================*/
-#if !defined(TUNER_GUI_TASK)
-#define TUNER_GUI_TASK
+#if !defined(STANDBY_BLANK_GUI)
+#define STANDBY_BLANK_GUI
 
-#include "tuner_controller.hpp"
+#include "globals.h"
+#include "lvgl.h"
 
-void tuner_gui_task_tuner_state_changed(TunerState old_state, TunerState new_state);
-void user_settings_updated();
+uint8_t blank_standby_gui_get_id();
+const char * blank_standby_gui_get_name();
+void blank_standby_gui_init(lv_obj_t *screen);
+void blank_standby_gui_cleanup();
 
 #endif

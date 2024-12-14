@@ -12,12 +12,14 @@
 #include "globals.h"
 #include "UserSettings.h"
 #include "pitch_detector_task.h"
+#include "tuner_controller.hpp"
 #include "tuner_gui_task.h"
 
 extern void gpio_task(void *pvParameter);
 extern void tuner_gui_task(void *pvParameter);
 extern void pitch_detector_task(void *pvParameter);
 
+TunerController *tunerController;
 UserSettings *userSettings;
 
 TaskHandle_t gpioTaskHandle;
@@ -41,9 +43,36 @@ GPIO 27 - Momentary foot switch input
 
 static const char *TAG = "TUNER";
 
+void tuner_state_will_change_cb(TunerState old_state, TunerState new_state) {
+    ESP_LOGI(TAG, "tuner_state_will_change_cb: %d > %d", old_state, new_state);
+}
+
+void tuner_state_did_change_cb(TunerState old_state, TunerState new_state) {
+    // Suspend and resume tasks as needed.
+    switch (new_state) {
+    case tunerStateSettings:
+        vTaskSuspend(gpioTaskHandle); // Without pausing this NVS failed to work (crashes the app)
+        vTaskSuspend(detectorTaskHandle);
+        break;
+    case tunerStateStandby:
+        vTaskSuspend(detectorTaskHandle);
+        break;
+    case tunerStateTuning:
+        // eTaskState gpioTaskState = eTaskGetState(gpioTaskHandle);
+        // if (gpioTaskState == eSuspended) {
+        // }
+        vTaskResume(gpioTaskHandle);
+        vTaskResume(detectorTaskHandle);
+        break;
+    case tunerStateBooting:
+        break;
+    }
+
+    // Tell the UI about the update so it can update.
+    tuner_gui_task_tuner_state_changed(old_state, new_state);
+}
+
 void user_settings_will_show_cb() {
-    vTaskSuspend(gpioTaskHandle); // Without pausing this NVS failed to work (crashes the app)
-    vTaskSuspend(detectorTaskHandle);
 }
 
 void user_settings_changed_cb() {
@@ -53,9 +82,6 @@ void user_settings_changed_cb() {
 
 /// @brief Called right before user settings exits back to the main tuner UI.
 void user_settings_will_exit_cb() {
-    user_settings_will_exit();
-    vTaskResume(gpioTaskHandle);
-    vTaskResume(detectorTaskHandle);
 }
 
 extern "C" void app_main() {
@@ -64,11 +90,13 @@ extern "C" void app_main() {
     userSettings = new UserSettings(user_settings_will_show_cb, user_settings_changed_cb, user_settings_will_exit_cb);
     user_settings_changed_cb(); // Calling this allows the pitch detector and tuner UI to initialize properly with current user
 
+    tunerController = new TunerController(tuner_state_will_change_cb, tuner_state_did_change_cb);
+
     // Start the GPIO Task
     xTaskCreatePinnedToCore(
         gpio_task,          // callback function
         "gpio",             // debug name of the task
-        1024,               // stack depth (no idea what this should be)
+        2048,               // stack depth (no idea what this should be)
         NULL,               // params to pass to the callback function
         0,                  // ux priority - higher value is higher priority
         &gpioTaskHandle,    // handle to the created task - we don't need it
