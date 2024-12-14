@@ -7,7 +7,7 @@
 
 #include "defines.h"
 #include "globals.h"
-#include "tuner_controller.hpp"
+#include "tuner_controller.h"
 #include "UserSettings.h"
 
 #include "lvgl.h"
@@ -143,7 +143,7 @@ void handle_gpio_pins() {
 void handle_normal_press() {
     ESP_LOGI(TAG, "NORMAL PRESS detected");
 
-    TunerState state = tunerController->getTunerState();
+    TunerState state = tunerController->getState();
     switch (state) {
     case tunerStateStandby:
         ESP_LOGI(TAG, "Turning ON the relay and going to tuning mode");
@@ -152,7 +152,7 @@ void handle_normal_press() {
         current_relay_gpio_level = 1;
         
         // Go to tuning mode
-        tunerController->setTunerState(tunerStateTuning);
+        tunerController->setState(tunerStateTuning);
         break;
     case tunerStateTuning:
         ESP_LOGI(TAG, "Turning OFF the relay and going to standby mode");
@@ -161,7 +161,7 @@ void handle_normal_press() {
         current_relay_gpio_level = 0;
 
         // Go to standby mode
-        tunerController->setTunerState(tunerStateStandby);
+        tunerController->setState(tunerStateStandby);
         break;
     default:
         break;

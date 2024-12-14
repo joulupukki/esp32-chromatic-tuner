@@ -196,8 +196,8 @@ void tuner_gui_task(void *pvParameter) {
     // function). When gpio_task signals that the state should change, the
     // callback quickly writes to the current_ui_tuner_state (using a mutex) and
     // then tuner_gui_task does the actual update inside the while loop.
-    TunerState old_tuner_ui_state = tunerController->getTunerState();
-    tunerController->setTunerState(tunerStateStandby);
+    TunerState old_tuner_ui_state = tunerController->getState();
+    tunerController->setState(tunerStateStandby);
 
     while(1) {
         // handle_gpio_pins();
@@ -342,7 +342,7 @@ TunerNoteName get_pitch_name_and_cents_from_frequency(float freq, float *cents) 
 
 void settings_button_cb(lv_event_t *e) {
     ESP_LOGI(TAG, "Settings button clicked");
-    tunerController->setTunerState(tunerStateSettings);
+    tunerController->setState(tunerStateSettings);
 }
 
 void create_settings_menu_button(lv_obj_t * parent) {
