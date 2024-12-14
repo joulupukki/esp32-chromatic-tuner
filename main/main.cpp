@@ -12,7 +12,7 @@
 #include "globals.h"
 #include "UserSettings.h"
 #include "pitch_detector_task.h"
-#include "tuner_controller.hpp"
+#include "tuner_controller.h"
 #include "tuner_gui_task.h"
 
 extern void gpio_task(void *pvParameter);

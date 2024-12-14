@@ -6,7 +6,7 @@
 =============================================================================*/
 #include "UserSettings.h"
 
-#include "tuner_controller.hpp"
+#include "tuner_controller.h"
 #include "tuner_ui_interface.h"
 
 static const char *TAG = "Settings";
@@ -700,7 +700,7 @@ void UserSettings::rotateScreenTo(TunerOrientation newRotation) {
 
 static void handleExitButtonClicked(lv_event_t *e) {
     ESP_LOGI(TAG, "Exit button clicked");
-    tunerController->setTunerState(tunerStateTuning);
+    tunerController->setState(tunerStateTuning);
 }
 
 static void handleTunerButtonClicked(lv_event_t *e) {
