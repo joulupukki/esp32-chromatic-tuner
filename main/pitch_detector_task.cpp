@@ -7,7 +7,7 @@
 
 #include "defines.h"
 #include "globals.h"
-#include "UserSettings.h"
+#include "user_settings.h"
 
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"

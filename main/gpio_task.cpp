@@ -8,7 +8,7 @@
 #include "defines.h"
 #include "globals.h"
 #include "tuner_controller.h"
-#include "UserSettings.h"
+#include "user_settings.h"
 
 #include "lvgl.h"
 #include "esp_lvgl_port.h"

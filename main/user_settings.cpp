@@ -4,7 +4,7 @@
 
     Distributed under the MIT License [ https://opensource.org/licenses/MIT ]
 =============================================================================*/
-#include "UserSettings.h"
+#include "user_settings.h"
 
 #include "tuner_controller.h"
 #include "tuner_ui_interface.h"

@@ -8,7 +8,7 @@
 #include <stdlib.h>
 
 #include "globals.h"
-#include "UserSettings.h"
+#include "user_settings.h"
 
 #include "esp_lvgl_port.h"
 
