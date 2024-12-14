@@ -5,7 +5,7 @@
 #                     )
 
 # ESP32-CYD
-idf_component_register(SRCS "lcd.c" "touch.c" "OneEuroFilter.cpp" "raleway_128.c" "tuner_font_images.c" "globals.cpp" "UserSettings.cpp" "fontawesome_48.c" "gpio_task.cpp" "pitch_detector_task.cpp" "tuner_gui_task.cpp" "tuner_ui_needle.cpp" "tuner_ui_strobe.cpp" "main.cpp"
+idf_component_register(SRCS "lcd.c" "touch.c" "OneEuroFilter.cpp" "raleway_128.c" "tuner_font_images.c" "globals.cpp" "UserSettings.cpp" "fontawesome_48.c" "gpio_task.cpp" "pitch_detector_task.cpp" "tuner_gui_task.cpp" "standby_ui_blank.cpp" "tuner_ui_needle.cpp" "tuner_ui_strobe.cpp" "main.cpp"
                     INCLUDE_DIRS "."
 #                    REQUIRES esp_lcd driver esp_adc hal
                     REQUIRES esp_lcd driver esp_adc nvs_flash

@@ -6,10 +6,12 @@
 =============================================================================*/
 #include "UserSettings.h"
 
+#include "tuner_controller.hpp"
 #include "tuner_ui_interface.h"
 
 static const char *TAG = "Settings";
 
+extern TunerController *tunerController;
 extern TunerGUIInterface available_guis[1]; // defined in tuner_gui_task.cpp
 extern size_t num_of_available_guis;
 
@@ -40,6 +42,7 @@ extern size_t num_of_available_guis;
 #define MENU_BTN_EXIT               "Exit"
 
 // Setting keys in NVS can only be up to 15 chars max
+#define SETTING_STANDBY_GUI_INDEX           "standby_gui_idx"
 #define SETTING_TUNER_GUI_INDEX             "tuner_gui_index"
 #define SETTING_KEY_IN_TUNE_WIDTH           "in_tune_width"
 #define SETTING_KEY_NOTE_NAME_PALETTE       "note_nm_palette"
@@ -138,6 +141,12 @@ void UserSettings::loadSettings() {
     uint8_t value;
     uint32_t value32;
 
+    if (nvs_get_u8(nvsHandle, SETTING_STANDBY_GUI_INDEX, &value) == ESP_OK) {
+        standbyGUIIndex = value;
+    } else {
+        standbyGUIIndex = DEFAULT_STANDBY_GUI_INDEX;
+    }
+
     if (nvs_get_u8(nvsHandle, SETTING_TUNER_GUI_INDEX, &value) == ESP_OK) {
         tunerGUIIndex = value;
     } else {
@@ -229,6 +238,9 @@ void UserSettings::saveSettings() {
     uint8_t value;
     uint32_t value32;
 
+    value = standbyGUIIndex;
+    nvs_set_u8(nvsHandle, SETTING_STANDBY_GUI_INDEX, value);
+
     value = tunerGUIIndex;
     nvs_set_u8(nvsHandle, SETTING_TUNER_GUI_INDEX, value);
 
@@ -261,12 +273,14 @@ void UserSettings::saveSettings() {
 
     nvs_commit(nvsHandle);
 
-    ESP_LOGI("Settings", "Settings saved");
+    ESP_LOGI(TAG, "Settings saved");
 
     settingsChangedCallback();
 }
 
 void UserSettings::restoreDefaultSettings() {
+    standbyGUIIndex = DEFAULT_STANDBY_GUI_INDEX;
+    tunerGUIIndex = DEFAULT_TUNER_GUI_INDEX;
     inTuneCentsWidth = DEFAULT_IN_TUNE_CENTS_WIDTH;
     noteNamePalette = DEFAULT_NOTE_NAME_PALETTE;
     displayOrientation = DEFAULT_DISPLAY_ORIENTATION;
@@ -350,7 +364,7 @@ void UserSettings::createMenu(const char *buttonNames[], const char *buttonSymbo
     int32_t buttonWidthPercentage = 100;
 
     for (int i = 0; i < numOfButtons; i++) {
-        ESP_LOGI("Settings", "Creating menu item: %d of %d", i, numOfButtons);
+        ESP_LOGI(TAG, "Creating menu item: %d of %d", i, numOfButtons);
         const char *buttonName = buttonNames[i];
         lv_event_cb_t eventCallback = eventCallbacks[i];
         btn = lv_btn_create(scrollable);
@@ -551,9 +565,9 @@ static void lv_spinbox_increment_event_cb(lv_event_t * e) {
 
         float *spinboxValue = (float *)lv_event_get_user_data(e);
         int32_t newValue = lv_spinbox_get_value(spinbox);
-        ESP_LOGI("Settings", "New spinbox value: %ld", newValue);
+        ESP_LOGI(TAG, "New spinbox value: %ld", newValue);
         *spinboxValue = newValue * spinboxConversionFactor;
-        ESP_LOGI("Settings", "New settings value: %f", *spinboxValue);
+        ESP_LOGI(TAG, "New settings value: %f", *spinboxValue);
     }
     lvgl_port_unlock();
 }
@@ -570,9 +584,9 @@ static void lv_spinbox_decrement_event_cb(lv_event_t * e) {
 
         float *spinboxValue = (float *)lv_event_get_user_data(e);
         int32_t newValue = lv_spinbox_get_value(spinbox);
-        ESP_LOGI("Settings", "New spinbox value: %ld", newValue);
+        ESP_LOGI(TAG, "New spinbox value: %ld", newValue);
         *spinboxValue = newValue * spinboxConversionFactor;
-        ESP_LOGI("Settings", "New settings value: %f", *spinboxValue);
+        ESP_LOGI(TAG, "New settings value: %f", *spinboxValue);
     }
     lvgl_port_unlock();
 }
@@ -598,7 +612,7 @@ void UserSettings::createSpinbox(const char *title, uint32_t minRange, uint32_t 
     lv_spinbox_set_range(spinbox, minRange, maxRange);
     lv_obj_set_style_text_font(spinbox, &lv_font_montserrat_36, 0);
     lv_spinbox_set_digit_format(spinbox, digitCount, separatorPosition);
-    ESP_LOGI("Settings", "Setting initial spinbox value of: %f / %f", *spinboxValue, conversionFactor);
+    ESP_LOGI(TAG, "Setting initial spinbox value of: %f / %f", *spinboxValue, conversionFactor);
     lv_spinbox_set_value(spinbox, *spinboxValue / conversionFactor);
     lv_spinbox_step_prev(spinbox); // Moves the step (cursor)
     lv_obj_center(spinbox);
@@ -634,13 +648,8 @@ void UserSettings::createSpinbox(const char *title, uint32_t minRange, uint32_t 
 }
 
 void UserSettings::exitSettings() {
-    if (!lvgl_port_lock(0)) {
-        return;
-    }
-
     lv_obj_t *mainScreen = screenStack.front();
     settingsWillExitCallback();
-    lv_scr_load(mainScreen);
 
     // Remove all but the first item out of the screenStack.
     while (screenStack.size() > 1) {
@@ -651,9 +660,9 @@ void UserSettings::exitSettings() {
         screenStack.pop_back();
     }
 
-    lvgl_port_unlock();
-
     setIsShowingSettings(false);
+    lv_obj_t *main_screen = screenStack.back();
+    lv_screen_load(main_screen);
 }
 
 void UserSettings::rotateScreenTo(TunerOrientation newRotation) {
@@ -690,18 +699,12 @@ void UserSettings::rotateScreenTo(TunerOrientation newRotation) {
 }
 
 static void handleExitButtonClicked(lv_event_t *e) {
-    ESP_LOGI("Settings", "Exit button clicked");
-    UserSettings *settings;
-    if (!lvgl_port_lock(0)) {
-        return;
-    }
-    settings = (UserSettings *)lv_obj_get_user_data((lv_obj_t *)lv_event_get_target(e));
-    lvgl_port_unlock();
-    settings->exitSettings();
+    ESP_LOGI(TAG, "Exit button clicked");
+    tunerController->setTunerState(tunerStateTuning);
 }
 
 static void handleTunerButtonClicked(lv_event_t *e) {
-    ESP_LOGI("Settings", "Tuner button clicked");
+    ESP_LOGI(TAG, "Tuner button clicked");
     UserSettings *settings;
     if (!lvgl_port_lock(0)) {
         return;
@@ -720,7 +723,7 @@ static void handleTunerButtonClicked(lv_event_t *e) {
 }
 
 static void handleTunerModeButtonClicked(lv_event_t *e) {
-    ESP_LOGI("Settings", "Tuner mode button clicked");
+    ESP_LOGI(TAG, "Tuner mode button clicked");
     UserSettings *settings;
     if (!lvgl_port_lock(0)) {
         return;
@@ -742,7 +745,7 @@ static void handleTunerModeButtonClicked(lv_event_t *e) {
 }
 
 static void handleTunerModeSelected(lv_event_t *e) {
-    ESP_LOGI("Settings", "Tuner mode clicked");
+    ESP_LOGI(TAG, "Tuner mode clicked");
     UserSettings *settings;
     if (!lvgl_port_lock(0)) {
         return;
@@ -767,7 +770,7 @@ static void handleTunerModeSelected(lv_event_t *e) {
 }
 
 static void handleInTuneThresholdButtonClicked(lv_event_t *e) {
-    ESP_LOGI("Settings", "In Tune Threshold button clicked");
+    ESP_LOGI(TAG, "In Tune Threshold button clicked");
     UserSettings *settings;
     if (!lvgl_port_lock(0)) {
         return;
@@ -796,7 +799,7 @@ static void handleInTuneThresholdRoller(lv_event_t *e) {
     lv_event_code_t code = lv_event_get_code(e);
     if(code == LV_EVENT_VALUE_CHANGED) {
         uint32_t selectedIndex = lv_roller_get_selected(roller);
-        ESP_LOGI("Settings", "In Tune Threshold Roller index selected: %ld", selectedIndex);
+        ESP_LOGI(TAG, "In Tune Threshold Roller index selected: %ld", selectedIndex);
         *rollerValue = selectedIndex + 1; // TODO: Make this work for other things too
     }
 
@@ -807,11 +810,11 @@ static void handleInTuneThresholdButtonValueClicked(lv_event_t *e) {
     if (!lvgl_port_lock(0)) {
         return;
     }
-    ESP_LOGI("Settings", "In Tune Threshold value clicked");
+    ESP_LOGI(TAG, "In Tune Threshold value clicked");
     lv_obj_t *btn = (lv_obj_t *)lv_event_get_target(e);
     lv_obj_t *label = lv_obj_get_child(btn, 0);
     if (label == NULL) {
-        ESP_LOGI("SETTINGS", "Label is null");
+        ESP_LOGI(TAG, "Label is null");
         lvgl_port_unlock();
         return;
     }
@@ -838,7 +841,7 @@ static void handleInTuneThresholdButtonValueClicked(lv_event_t *e) {
 }
 
 static void handleDisplayButtonClicked(lv_event_t *e) {
-    ESP_LOGI("Settings", "Display button clicked");
+    ESP_LOGI(TAG, "Display button clicked");
     UserSettings *settings;
     if (!lvgl_port_lock(0)) {
         return;
@@ -859,7 +862,7 @@ static void handleDisplayButtonClicked(lv_event_t *e) {
 }
 
 static void handleBrightnessButtonClicked(lv_event_t *e) {
-    ESP_LOGI("Settings", "Brightness slider changed");
+    ESP_LOGI(TAG, "Brightness slider changed");
     UserSettings *settings;
     if (!lvgl_port_lock(0)) {
         return;
@@ -881,7 +884,7 @@ static void handleBrightnessSlider(lv_event_t *e) {
 
     if (lcd_display_brightness_set(newValue) == ESP_OK) {
         *sliderValue = (float)newValue * 0.01;
-        ESP_LOGI("Settings", "New slider value: %.2f", *sliderValue);
+        ESP_LOGI(TAG, "New slider value: %.2f", *sliderValue);
     }
     lvgl_port_unlock();
 }
@@ -927,7 +930,7 @@ static void handleNoteColorButtonClicked(lv_event_t *e) {
 }
 
 static void handleNoteColorSelected(lv_event_t *e, lv_palette_t palette) {
-    ESP_LOGI("Settings", "Note Color Selection clicked");
+    ESP_LOGI(TAG, "Note Color Selection clicked");
     UserSettings *settings;
     if (!lvgl_port_lock(0)) {
         return;
@@ -973,7 +976,7 @@ static void handleNoteColorYellowSelected(lv_event_t *e) {
 
 
 static void handleRotationButtonClicked(lv_event_t *e) {
-    ESP_LOGI("Settings", "Rotation button clicked");
+    ESP_LOGI(TAG, "Rotation button clicked");
     UserSettings *settings;
     if (!lvgl_port_lock(0)) {
         return;
@@ -996,7 +999,7 @@ static void handleRotationButtonClicked(lv_event_t *e) {
 }
 
 static void handleRotationNormalClicked(lv_event_t *e) {
-    ESP_LOGI("Settings", "Rotation Normal clicked");
+    ESP_LOGI(TAG, "Rotation Normal clicked");
     UserSettings *settings;
     if (!lvgl_port_lock(0)) {
         return;
@@ -1007,7 +1010,7 @@ static void handleRotationNormalClicked(lv_event_t *e) {
 }
 
 static void handleRotationLeftClicked(lv_event_t *e) {
-    ESP_LOGI("Settings", "Rotation Left clicked");
+    ESP_LOGI(TAG, "Rotation Left clicked");
     UserSettings *settings;
     if (!lvgl_port_lock(0)) {
         return;
@@ -1018,7 +1021,7 @@ static void handleRotationLeftClicked(lv_event_t *e) {
 }
 
 static void handleRotationRightClicked(lv_event_t *e) {
-    ESP_LOGI("Settings", "Rotation Right clicked");
+    ESP_LOGI(TAG, "Rotation Right clicked");
     UserSettings *settings;
     if (!lvgl_port_lock(0)) {
         return;
@@ -1029,7 +1032,7 @@ static void handleRotationRightClicked(lv_event_t *e) {
 }
 
 static void handleRotationUpsideDnClicked(lv_event_t *e) {
-    ESP_LOGI("Settings", "Rotation Upside Down clicked");
+    ESP_LOGI(TAG, "Rotation Upside Down clicked");
     UserSettings *settings;
     if (!lvgl_port_lock(0)) {
         return;
@@ -1079,7 +1082,7 @@ static void handle1EUBetaButtonClicked(lv_event_t *e) {
     }
     settings = (UserSettings *)lv_obj_get_user_data((lv_obj_t *)lv_event_get_target(e));
     lvgl_port_unlock();
-    ESP_LOGI("Settings", "Opening 1EU Spinbox with %f", settings->oneEUBeta);
+    ESP_LOGI(TAG, "Opening 1EU Spinbox with %f", settings->oneEUBeta);
     settings->createSpinbox(MENU_BTN_1EU_BETA, 0, 1000, 4, 1, &settings->oneEUBeta, 0.001);
 }
 
@@ -1140,7 +1143,7 @@ static void handleFactoryResetChickenOutConfirmed(lv_event_t *e) {
     settings = (UserSettings *)lv_event_get_user_data(e);
 
     // Handle factory reset logic here
-    ESP_LOGI("Settings", "Factory Reset initiated!");
+    ESP_LOGI(TAG, "Factory Reset initiated!");
     settings->restoreDefaultSettings();
 
     // Close the message box
@@ -1180,7 +1183,7 @@ static void handleFactoryResetButtonClicked(lv_event_t *e) {
 }
 
 static void handleBackButtonClicked(lv_event_t *e) {
-    ESP_LOGI("Settings", "Back button clicked");
+    ESP_LOGI(TAG, "Back button clicked");
     UserSettings *settings;
     if (!lvgl_port_lock(0)) {
         return;

@@ -66,7 +66,8 @@ class UserSettings {
 
 public:
     // User Setting Variables
-    uint8_t             tunerGUIIndex           = 0; // The ID is also the index in the `available_guis` array.
+    uint8_t             standbyGUIIndex         = DEFAULT_STANDBY_GUI_INDEX;
+    uint8_t             tunerGUIIndex           = DEFAULT_TUNER_GUI_INDEX; // The ID is also the index in the `available_guis` array.
     uint8_t             inTuneCentsWidth        = DEFAULT_IN_TUNE_CENTS_WIDTH;
     lv_palette_t        noteNamePalette         = DEFAULT_NOTE_NAME_PALETTE;
     TunerOrientation    displayOrientation      = DEFAULT_DISPLAY_ORIENTATION;
