@@ -10,7 +10,7 @@
 #include "standby_ui_blank.h"
 #include "tuner_standby_ui_interface.h"
 #include "tuner_ui_interface.h"
-#include "UserSettings.h"
+#include "user_settings.h"
 
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"

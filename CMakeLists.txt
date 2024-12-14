@@ -11,7 +11,7 @@ include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 
 set(EXTRA_COMPONENT_DIRS "extra_components/q/q_lib" "extra_components/q-infra")
 
-project(esp32-chromatic-tuner)
+project(q-tune)
 
 link_libraries(PUBLIC libq)
 link_libraries(PUBLIC infra)

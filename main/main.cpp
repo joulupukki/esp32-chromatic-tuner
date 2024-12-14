@@ -10,7 +10,7 @@
 
 #include "defines.h"
 #include "globals.h"
-#include "UserSettings.h"
+#include "user_settings.h"
 #include "pitch_detector_task.h"
 #include "tuner_controller.h"
 #include "tuner_gui_task.h"
