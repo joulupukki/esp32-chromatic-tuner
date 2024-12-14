@@ -18,6 +18,7 @@
 //
 // Default User Settings
 //
+#define DEFAULT_INITIAL_STATE           ((TunerState) tunerStateTuning)
 #define DEFAULT_STANDBY_GUI_INDEX       (0)
 #define DEFAULT_TUNER_GUI_INDEX         (0)
 #define DEFAULT_IN_TUNE_CENTS_WIDTH     ((uint8_t) 2)

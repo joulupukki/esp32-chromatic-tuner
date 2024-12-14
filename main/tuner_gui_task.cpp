@@ -197,7 +197,8 @@ void tuner_gui_task(void *pvParameter) {
     // callback quickly writes to the current_ui_tuner_state (using a mutex) and
     // then tuner_gui_task does the actual update inside the while loop.
     TunerState old_tuner_ui_state = tunerController->getState();
-    tunerController->setState(tunerStateStandby);
+    TunerState initial_state = userSettings->initialState;
+    tunerController->setState(initial_state);
 
     while(1) {
         // handle_gpio_pins();

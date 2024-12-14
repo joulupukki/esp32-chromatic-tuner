@@ -11,6 +11,8 @@
 #include <cstdint>
 #include <cstring>
 
+#include "tuner_controller.h"
+
 #include "lvgl.h"
 #include "esp_lvgl_port.h"
 #include "esp_log.h"
@@ -66,6 +68,7 @@ class UserSettings {
 
 public:
     // User Setting Variables
+    TunerState          initialState            = DEFAULT_INITIAL_STATE;
     uint8_t             standbyGUIIndex         = DEFAULT_STANDBY_GUI_INDEX;
     uint8_t             tunerGUIIndex           = DEFAULT_TUNER_GUI_INDEX; // The ID is also the index in the `available_guis` array.
     uint8_t             inTuneCentsWidth        = DEFAULT_IN_TUNE_CENTS_WIDTH;

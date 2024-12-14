@@ -22,6 +22,9 @@ extern size_t num_of_available_guis;
 #define MENU_BTN_DISPLAY            "Display"
     #define MENU_BTN_BRIGHTNESS         "Brightness"
     #define MENU_BTN_NOTE_COLOR         "Note Color"
+    #define MENU_BTN_INITIAL_SCREEN     "Initial Screen"
+        #define MENU_BTN_STANDBY            "Standby"
+        #define MENU_BTN_TUNING             "Tuning"
     #define MENU_BTN_ROTATION           "Rotation"
         #define MENU_BTN_ROTATION_NORMAL    "Normal"
         #define MENU_BTN_ROTATION_LEFT      "Left"
@@ -42,6 +45,7 @@ extern size_t num_of_available_guis;
 #define MENU_BTN_EXIT               "Exit"
 
 // Setting keys in NVS can only be up to 15 chars max
+#define SETTINGS_INITIAL_SCREEN             "initial_screen"
 #define SETTING_STANDBY_GUI_INDEX           "standby_gui_idx"
 #define SETTING_TUNER_GUI_INDEX             "tuner_gui_index"
 #define SETTING_KEY_IN_TUNE_WIDTH           "in_tune_width"
@@ -109,7 +113,10 @@ static void handleNoteColorGreenSelected(lv_event_t *e);
 static void handleNoteColorOrangeSelected(lv_event_t *e);
 static void handleNoteColorYellowSelected(lv_event_t *e);
 
-static void handleIndicatorButtonClicked(lv_event_t *e);
+static void handleInitialScreenButtonClicked(lv_event_t *e);
+static void handleInitialStandbyButtonClicked(lv_event_t *e);
+static void handleInitialTuningButtonClicked(lv_event_t *e);
+
 static void handleRotationButtonClicked(lv_event_t *e);
 static void handleRotationNormalClicked(lv_event_t *e);
 static void handleRotationLeftClicked(lv_event_t *e);
@@ -140,6 +147,12 @@ void UserSettings::loadSettings() {
 
     uint8_t value;
     uint32_t value32;
+
+    if (nvs_get_u8(nvsHandle, SETTINGS_INITIAL_SCREEN, &value) == ESP_OK) {
+        initialState = (TunerState)value;
+    } else {
+        initialState = DEFAULT_INITIAL_STATE;
+    }
 
     if (nvs_get_u8(nvsHandle, SETTING_STANDBY_GUI_INDEX, &value) == ESP_OK) {
         standbyGUIIndex = value;
@@ -237,6 +250,9 @@ void UserSettings::saveSettings() {
     ESP_LOGI(TAG, "save settings");
     uint8_t value;
     uint32_t value32;
+
+    value = initialState;
+    nvs_set_u8(nvsHandle, SETTINGS_INITIAL_SCREEN, value);
 
     value = standbyGUIIndex;
     nvs_set_u8(nvsHandle, SETTING_STANDBY_GUI_INDEX, value);
@@ -851,14 +867,16 @@ static void handleDisplayButtonClicked(lv_event_t *e) {
     const char *buttonNames[] = {
         MENU_BTN_BRIGHTNESS,
         MENU_BTN_NOTE_COLOR,
+        MENU_BTN_INITIAL_SCREEN,
         MENU_BTN_ROTATION,
     };
     lv_event_cb_t callbackFunctions[] = {
         handleBrightnessButtonClicked,
         handleNoteColorButtonClicked,
+        handleInitialScreenButtonClicked,
         handleRotationButtonClicked,
     };
-    settings->createMenu(buttonNames, NULL, NULL, callbackFunctions, 3);
+    settings->createMenu(buttonNames, NULL, NULL, callbackFunctions, 4);
 }
 
 static void handleBrightnessButtonClicked(lv_event_t *e) {
@@ -974,6 +992,48 @@ static void handleNoteColorYellowSelected(lv_event_t *e) {
     handleNoteColorSelected(e, LV_PALETTE_YELLOW);
 }
 
+static void handleInitialScreenButtonClicked(lv_event_t *e) {
+    ESP_LOGI(TAG, "Initial screen button clicked");
+    UserSettings *settings;
+    if (!lvgl_port_lock(0)) {
+        return;
+    }
+    settings = (UserSettings *)lv_obj_get_user_data((lv_obj_t *)lv_event_get_target(e));
+    lvgl_port_unlock();
+    const char *buttonNames[] = {
+        MENU_BTN_STANDBY,
+        MENU_BTN_TUNING,
+    };
+    lv_event_cb_t callbackFunctions[] = {
+        handleInitialStandbyButtonClicked,
+        handleInitialTuningButtonClicked,
+    };
+    settings->createMenu(buttonNames, NULL, NULL, callbackFunctions, 2);
+}
+
+static void handleInitialStandbyButtonClicked(lv_event_t *e) {
+    ESP_LOGI(TAG, "Set initial screen as standby button clicked");
+    UserSettings *settings;
+    if (!lvgl_port_lock(0)) {
+        return;
+    }
+    settings = (UserSettings *)lv_obj_get_user_data((lv_obj_t *)lv_event_get_target(e));
+    lvgl_port_unlock();
+    settings->initialState = tunerStateStandby;
+    settings->removeCurrentMenu(); // Automatically press the back button
+}
+
+static void handleInitialTuningButtonClicked(lv_event_t *e) {
+    ESP_LOGI(TAG, "Set initial screen as tuning button clicked");
+    UserSettings *settings;
+    if (!lvgl_port_lock(0)) {
+        return;
+    }
+    settings = (UserSettings *)lv_obj_get_user_data((lv_obj_t *)lv_event_get_target(e));
+    lvgl_port_unlock();
+    settings->initialState = tunerStateTuning;
+    settings->removeCurrentMenu(); // Automatically press the back button
+}
 
 static void handleRotationButtonClicked(lv_event_t *e) {
     ESP_LOGI(TAG, "Rotation button clicked");

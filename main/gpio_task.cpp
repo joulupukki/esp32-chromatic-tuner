@@ -36,6 +36,7 @@ bool footswitch_long_press_triggered = false;
 //
 void configure_gpio_pins();
 void handle_gpio_pins();
+void ensure_relay_state();
 void handle_normal_press();
 void handle_double_press();
 void handle_long_press();
@@ -46,6 +47,7 @@ void gpio_task(void *pvParameter) {
 
     while(1) {
         handle_gpio_pins();
+        ensure_relay_state();
 
         vTaskDelay(pdMS_TO_TICKS(50)); // Small delay for debouncing
     }
@@ -138,6 +140,22 @@ void handle_gpio_pins() {
 
     // gpio_set_level(RELAY_GPIO, 0); // Turn off GPIO 22
     // current_relay_gpio_level = 0;
+}
+
+/// The purpose of this function is to make sure the relay is in the correct
+/// state according to the tuner's current state. This is really only needed
+/// for initial startup. We want to keep the controlling of the relay all done
+/// here in gpio_task but if the user has tuning set as their initial startup
+/// screen, we need to make sure to turn the relay on.
+void ensure_relay_state() {
+    TunerState current_state = tunerController->getState();
+    if (current_state == tunerStateStandby && current_relay_gpio_level != 0) {
+        gpio_set_level(RELAY_GPIO, 0); // Turn off GPIO 22
+        current_relay_gpio_level = 0;
+    } else if (current_state == tunerStateTuning && current_relay_gpio_level != 1) {
+        gpio_set_level(RELAY_GPIO, 1); // Turn on GPIO 22
+        current_relay_gpio_level = 1;
+    }
 }
 
 void handle_normal_press() {
