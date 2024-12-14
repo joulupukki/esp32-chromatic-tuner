@@ -9,6 +9,4 @@
 #if !defined(TUNER_PITCH_DETECTOR_TASK)
 #define TUNER_PITCH_DETECTOR_TASK
 
-void update_pitch_detector_user_settings();
-
 #endif

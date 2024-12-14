@@ -11,7 +11,6 @@
 #include "defines.h"
 #include "globals.h"
 #include "user_settings.h"
-#include "pitch_detector_task.h"
 #include "tuner_controller.h"
 #include "tuner_gui_task.h"
 
@@ -76,7 +75,6 @@ void user_settings_will_show_cb() {
 }
 
 void user_settings_changed_cb() {
-    update_pitch_detector_user_settings();
     user_settings_updated();
 }
 

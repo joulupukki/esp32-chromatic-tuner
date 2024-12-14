@@ -225,6 +225,8 @@ void pitch_detector_task(void *pvParameter) {
                 }
 
                 // ESP_LOGI(TAG, "Min: %f, Max: %f, peak-to-peak: %f", minVal, maxVal, range);
+                oneEUFilter.setBeta(userSettings->oneEUBeta);
+                smoother.setAmount(userSettings->expSmoothing);
 
                 // Normalize the values between -1.0 and +1.0 before processing with qlib.
                 float midVal = range / 2;
@@ -314,10 +316,4 @@ void pitch_detector_task(void *pvParameter) {
 
     ESP_ERROR_CHECK(adc_continuous_stop(handle));
     ESP_ERROR_CHECK(adc_continuous_deinit(handle));
-}
-
-void update_pitch_detector_user_settings() {
-    oneEUFilter.setBeta(userSettings->oneEUBeta);
-    smoother.setAmount(userSettings->expSmoothing);
-    // movingAverage.setWindowSize(userSettings->movingAvgWindow);
 }
