@@ -3,4 +3,4 @@ managed_components/
 .DS_Store
 sdkconfig.old
 esp32-tuner/
-.vscode/settings.json
+.vscode/
