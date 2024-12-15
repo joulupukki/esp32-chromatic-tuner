@@ -22,7 +22,7 @@ If you are interested in building this tuner, be aware that there are a few vari
     ```
     git submodule update --init --recursive
     ```
-7. Open the esp32-chromatic-tuner folder in VS Code
+7. Open the `q-tune` folder in VS Code
 8. Set your ESP32 target (esp32)
     - Open the Command Palette (Command+Shift+P on a Mac) and select `ESP-IDF: Set Espressif Device Target`
     - Select `esp32`
