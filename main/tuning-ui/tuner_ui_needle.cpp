@@ -273,7 +273,7 @@ void needle_create_labels(lv_obj_t * parent) {
     needle_frequency_label = lv_label_create(parent);
     lv_label_set_long_mode(needle_frequency_label, LV_LABEL_LONG_CLIP);
 
-    lv_label_set_text_static(needle_frequency_label, no_freq_name);
+    lv_label_set_text_static(needle_frequency_label, "-");
     lv_obj_set_width(needle_frequency_label, screen_width);
     lv_obj_set_style_text_align(needle_frequency_label, LV_TEXT_ALIGN_RIGHT, 0);
     lv_obj_align(needle_frequency_label, LV_ALIGN_BOTTOM_RIGHT, 0, 0);
